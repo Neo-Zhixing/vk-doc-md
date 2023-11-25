@@ -55,17 +55,7 @@ function docbookRefblockValidityConvert(node: xast.ElementContent): mdast.RootCo
         return [
             <mdast.Text> {
                 type: 'text',
-                value: `\n::field{name="${name}"}\n`
-            },
-            <mdast.Link> {
-                type: 'link',
-                children: [
-                    <mdast.Text> {
-                        type: 'text',
-                        value: name,
-                    }
-                ],
-                url: '#' + name
+                value: `\n::validity-field{name="${name}"}\n`
             },
             ...rest.flatMap(a => docbookConvertNode(a)),
             <mdast.Text> {
@@ -236,7 +226,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                 return [
                     <mdast.Text> {
                         type: 'text',
-                        value: '\n::fieldgroup\n'
+                        value: '\n::validity-group{name="Valid Usage"}\n'
                     },
                     ...list.children.flatMap(j => docbookRefblockValidityConvert(j)),
                     <mdast.Text> {
@@ -303,21 +293,16 @@ async function main() {
                 return this.createInline(parent, 'quoted', target, { type: 'monospaced' })
             })
         })
-        this.inlineMacro(function() {
-            this.named('fname');
-            // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
-            this.match(/fname:(\w+)/);
-            this.process((parent: any, target: any) => {
-                return this.createInline(parent, 'quoted', `:nameref{name="${target}" type="func"}`)
+        for (const macro of ['fname', 'sname', 'ename']) {
+            this.inlineMacro(function() {
+                this.named(macro);
+                // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
+                this.match(new RegExp(macro + ':(\\w+)'))
+                this.process((parent: any, target: any) => {
+                    return this.createInline(parent, 'quoted', target, { type: 'monospaced' })
+                })
             })
-        })
-        this.inlineMacro(function() {
-            this.named('ename');
-            this.match(/ename:(\w+)/);
-            this.process((parent: any, target: any) => {
-                return this.createInline(parent, 'quoted', `:nameref{name="${target}" type="enum"}`)
-            })
-        })
+        }
         this.includeProcessor(function () {
             this.handles((target: string) => {
               return target.startsWith('{chapters}')
@@ -340,14 +325,14 @@ async function main() {
         try {
         contentXast = fromXml(`<root>${page}</root>`);
         } catch {
-            console.log('parsing', refpage.name, 'errored')
+            console.error('parsing', refpage.name, 'errored')
             continue;
         }
         const frontmatter: mdast.RootContent = {
             type: 'yaml',
             value: yamlStringify({
-                desc: refpage.desc,
-                name: refpage.name,
+                description: refpage.desc,
+                title: refpage.name,
                 type: refpage.type,
                 xrefs: refpage.xrefs,
             })

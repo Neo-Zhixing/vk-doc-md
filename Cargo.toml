@@ -1,0 +1,11 @@
+[package]
+name = "testaa"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+vk-parse = "0.12"
+regex = "1.10"
+heck = "0.4"

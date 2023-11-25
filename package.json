@@ -20,6 +20,6 @@
 	},
 	"scripts": {
 		"build": "tsc",
-		"exec": "tsc && node main.js"
+		"exec": "tsc && node ./src/main.js"
 	}
 }
