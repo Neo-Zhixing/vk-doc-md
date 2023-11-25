@@ -1,5 +1,5 @@
 use core::fmt;
-use heck::ToShoutySnakeCase;
+use heck::{ToShoutySnakeCase, ToSnakeCase};
 use std::{
     collections::HashMap,
     io::{Read, Seek, Write},
@@ -16,14 +16,14 @@ fn main() {
 
     for mdfile in std::fs::read_dir("./dist").unwrap() {
         let mdfile = mdfile.unwrap();
-        let mut file = std::fs::File::open(mdfile.path()).unwrap();
+        let mut file = std::fs::OpenOptions::new().read(true).write(true).open(mdfile.path()).unwrap();
         let mut mdcontent = String::new();
         file.read_to_string(&mut mdcontent).unwrap();
 
         let changed = converter.convert_file(&mut mdcontent);
         if changed {
-            //file.seek(std::io::SeekFrom::Start(0)).unwrap();
-            //file.write_all(mdcontent.as_bytes()).unwrap();
+            file.seek(std::io::SeekFrom::Start(0)).unwrap();
+            file.write_all(mdcontent.as_bytes()).unwrap();
         }
     }
 }
@@ -121,14 +121,28 @@ impl Converter {
                 let generated_code = self.generate_api_struct(&path[13..path.len() - 5]);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/flags/") {
-                self.generate_flags(&path[11..path.len() - 5]);
+                let generated_code = self.generate_flags(&path[11..path.len() - 5]);
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/protos/") {
-                self.generate_fn_prototype(&path[12..path.len() - 5]);
+                let generated_code = self.generate_fn_prototype(&path[12..path.len() - 5]);
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/enums/") {
-                self.generate_enum(&path[11..path.len() - 5]);
+                let generated_code = self.generate_enum(&path[11..path.len() - 5]);
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
+            } else if path.starts_with("/api/basetypes/") {
+                let generated_code = self.generate_basetype(&path.strip_prefix("/api/basetypes/").unwrap().strip_suffix(".adoc").unwrap());
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
+            } else if path.starts_with("/api/handles/") {
+                let generated_code = self.generate_handles(&path.strip_prefix("/api/handles/").unwrap().strip_suffix(".adoc").unwrap());
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
+            } else if path.starts_with("/api/defines/") {
+                let generated_code = self.generate_define(&path.strip_prefix("/api/defines/").unwrap().strip_suffix(".adoc").unwrap());
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
+            } else if path.starts_with("/api/funcpointers/") {
+                let generated_code = self.generate_fn_ptr(&path.strip_prefix("/api/funcpointers/").unwrap().strip_suffix(".adoc").unwrap());
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else {
                 println!("Unknown path: {:?}", path);
-                return false;
             }
         }
         let changed = !replacements.is_empty();
@@ -136,6 +150,95 @@ impl Converter {
             *file = file.replace(&key, &replacement);
         }
         changed
+    }
+    fn generate_fn_ptr(&self, name: &str) -> String {
+        let ty = &self.types[name];
+        // pub type PFN_vkDebugReportCallbackEXT =
+        //   Option<unsafe extern "system" fn(
+        //     flags: DebugReportFlagsEXT,
+        // object_type: DebugReportObjectTypeEXT, object: u64, location: usize, message_code: i32, p_layer_prefix: *const c_char, p_message: *const c_char, p_user_data: *mut c_void) -> Bool32>;
+
+        let (code, markup) = match &ty.spec {
+            vk_parse::TypeSpec::Code(code) => {
+                (code.code.as_str(), code.markup.as_slice())
+            },
+            _ => unimplemented!(),
+        };
+        let return_type = Regex::new(r"typedef +(.+) +\(").unwrap().captures(code).unwrap().get(1).unwrap().as_str();
+        let return_type = convert_c_type_to_rust(return_type);
+        let members = code.split("\n").skip(1).zip(markup.iter().skip(1)).map(|(line, markup)| {
+            let variable_name = Regex::new(r".* (\w+)[,\);]*").unwrap().captures(line).unwrap().get(1).unwrap().as_str().trim();
+            let type_name = Regex::new(r"(.*) +\w+[,\);]*").unwrap().captures(line).unwrap().get(1).unwrap().as_str().trim();
+            (variable_name.to_snake_case(), convert_c_type_to_rust(type_name))
+        })
+        .fold(String::new(), |a, (variable_name, type_name)| a + "        " + &variable_name + ": " + &type_name + ",\n")
+        .trim_end()
+        .to_string();
+        
+        let result =  format!("::code-group
+```c [C]
+{code}
+```
+```rs [Rust]
+pub type {name} = Option<
+    unsafe extern \"system\" fn(
+{members}
+    ) -> {return_type}
+>;
+```
+::"
+        );
+        result
+    }
+    fn generate_define(&self, name: &str) -> String {
+        let ty = &self.types[name];
+        let code = match &ty.spec {
+            vk_parse::TypeSpec::Code(code) => {
+                code.code.as_str()
+            },
+            _ => unimplemented!(),
+        };
+        return format!("```c
+{code}
+```
+"
+        )
+    }
+    fn generate_handles(&self, name: &str) -> String {
+        let ty = &self.types[name];
+        let code = match &ty.spec {
+            vk_parse::TypeSpec::Code(code) => {
+                code.code.as_str()
+            },
+            _ => unimplemented!(),
+        };
+        let rs_name = name.strip_prefix("Vk").unwrap();
+        return format!(
+            "::code-group
+```c [C]
+{code}
+```
+```rs [Rust]
+#[repr(transparent)]
+pub struct {rs_name}(_);
+```
+::
+"
+        )
+    }
+    fn generate_basetype(&self, name: &str) -> String {
+        let ty = &self.types[name];
+        let code = match &ty.spec {
+            vk_parse::TypeSpec::Code(code) => {
+                code.code.as_str()
+            },
+            _ => unimplemented!(),
+        };
+        return format!(
+            "```c
+{code}
+```"
+        )
     }
     fn generate_enum(&self, name: &str) -> String {
         if !self.enums.contains_key(name) {
@@ -517,6 +620,8 @@ fn convert_c_type_to_rust(c_type: &str) -> String {
     }
     match c_type {
         "void" => "std::ffi::c_void".to_string(),
+        "void*" => "*mut std::ffi::c_void".to_string(),
+        "const void*" => "*const std::ffi::c_void".to_string(),
         "uint64_t" => "u64".to_string(),
         "uint32_t" => "u32".to_string(),
         "uint16_t" => "u16".to_string(),
@@ -529,6 +634,8 @@ fn convert_c_type_to_rust(c_type: &str) -> String {
         "float" => "f32".to_string(),
         "size_t" => "usize".to_string(),
         "char" => "std::ffi::c_char".to_string(),
+        "const char*" => "*const std::ffi::c_char".to_string(),
+        "char*" => "*mut std::ffi::c_char".to_string(),
         _ => c_type.to_string(),
     }
 }
