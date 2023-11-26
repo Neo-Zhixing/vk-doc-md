@@ -1,7 +1,6 @@
-use core::fmt;
-use heck::{ToShoutySnakeCase, ToSnakeCase, ToLowerCamelCase};
+use heck::{ToShoutySnakeCase, ToSnakeCase};
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     io::{Read, Seek, Write},
     path::Path,
 };
@@ -16,7 +15,11 @@ fn main() {
 
     for mdfile in std::fs::read_dir("./dist").unwrap() {
         let mdfile = mdfile.unwrap();
-        let mut file = std::fs::OpenOptions::new().read(true).write(true).open(mdfile.path()).unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(mdfile.path())
+            .unwrap();
         let mut mdcontent = String::new();
         file.read_to_string(&mut mdcontent).unwrap();
 
@@ -34,8 +37,20 @@ struct Converter {
     commands: HashMap<String, vk_parse::CommandDefinition>,
     enums: HashMap<String, vk_parse::Enums>,
     consts: HashMap<String, vk_parse::Enum>,
+    parents: HashMap<String, String>, // mapping from item to [feature, extension]
 }
 
+fn add_item_parent(parents: &mut HashMap<String, String>, item: &str, parent: &str) {
+    match parents.entry(item.to_string()) {
+        Entry::Occupied(mut o) => {
+            *o.get_mut() += ", ";
+            *o.get_mut() += &parent;
+        }
+        Entry::Vacant(o) => {
+            o.insert(parent.to_string());
+        }
+    };
+}
 impl Converter {
     fn new(registry: Registry) -> Self {
         let mut this = Self {
@@ -44,10 +59,104 @@ impl Converter {
             commands: Default::default(),
             enums: Default::default(),
             consts: Default::default(),
+            parents: Default::default(),
         };
         for child in this.registry.0.iter() {
             use vk_parse::RegistryChild;
             match child {
+                RegistryChild::Feature(feature) => {
+                    if feature.name == "VKSC_VERSION_1_0" {
+                        continue;
+                    }
+                    for c in feature.children.iter() {
+                        match c {
+                            vk_parse::ExtensionChild::Require { items, .. } => {
+                                for item in items {
+                                    match item {
+                                        vk_parse::InterfaceItem::Type { name, comment } => {
+                                            add_item_parent(&mut this.parents, name, &feature.name);
+                                        }
+                                        vk_parse::InterfaceItem::Enum(e) => {
+                                            if e.api.as_ref().map(|a| a.as_str())
+                                                == Some("vulkansc")
+                                            {
+                                                continue;
+                                            }
+                                            add_item_parent(
+                                                &mut this.parents,
+                                                &e.name,
+                                                &feature.name,
+                                            );
+                                        }
+                                        vk_parse::InterfaceItem::Command { name, comment } => {
+                                            add_item_parent(
+                                                &mut this.parents,
+                                                &name,
+                                                &feature.name,
+                                            );
+                                        }
+                                        _ => (),
+                                    }
+                                }
+                            }
+                            vk_parse::ExtensionChild::Remove {
+                                api,
+                                profile,
+                                comment,
+                                items,
+                            } => (),
+                            _ => unimplemented!(),
+                        }
+                    }
+                }
+                RegistryChild::Extensions(s) => {
+                    for extension in s.children.iter() {
+                        for c in extension.children.iter() {
+                            match c {
+                                vk_parse::ExtensionChild::Require { items, .. } => {
+                                    for item in items {
+                                        match item {
+                                            vk_parse::InterfaceItem::Type { name, comment } => {
+                                                add_item_parent(
+                                                    &mut this.parents,
+                                                    &name,
+                                                    &extension.name,
+                                                );
+                                            }
+                                            vk_parse::InterfaceItem::Enum(e) => {
+                                                if e.api.as_ref().map(|a| a.as_str())
+                                                    == Some("vulkansc")
+                                                {
+                                                    continue;
+                                                }
+                                                add_item_parent(
+                                                    &mut this.parents,
+                                                    &e.name,
+                                                    &extension.name,
+                                                );
+                                            }
+                                            vk_parse::InterfaceItem::Command { name, comment } => {
+                                                add_item_parent(
+                                                    &mut this.parents,
+                                                    &name,
+                                                    &extension.name,
+                                                );
+                                            }
+                                            _ => (),
+                                        }
+                                    }
+                                }
+                                vk_parse::ExtensionChild::Remove {
+                                    api,
+                                    profile,
+                                    comment,
+                                    items,
+                                } => (),
+                                _ => unimplemented!(),
+                            }
+                        }
+                    }
+                }
                 RegistryChild::Enums(enums) => {
                     if enums.name.as_ref().map(|a| a.as_str()) == Some("API Constants") {
                         for const_value in enums.children.iter() {
@@ -111,52 +220,88 @@ impl Converter {
         this
     }
     fn convert_file(&self, file: &mut String) -> bool {
+        let name = Regex::new(r"\ntitle: (.+)\n")
+            .unwrap()
+            .captures(file)
+            .unwrap()
+            .get(1)
+            .unwrap()
+            .as_str();
+
+        let mut additional_attributes = String::new();
+        if self.parents.contains_key(name) {
+            additional_attributes += "parent: ";
+            additional_attributes += &self.parents[name];
+            additional_attributes += "\n";
+        }
+
         let regex = Regex::new(r"\[\{generated\}(.*)\]\(\{generated\}(.*)\)").unwrap();
         let mut replacements = HashMap::new();
-        let mut additional_attributes: Option<String> = None;
         for capture in regex.captures_iter(file) {
             let path = capture.get(1).unwrap().as_str().to_string();
             let path = path.replace("\\_", "_");
             assert_eq!(path, capture.get(2).unwrap().as_str());
             if path.starts_with("/api/structs/") {
-                let generated_code = self.generate_api_struct(&path[13..path.len() - 5]);
+                let n = &path[13..path.len() - 5];
+                let generated_code = self.generate_api_struct(n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/flags/") {
-                let generated_code = self.generate_flags(&path[11..path.len() - 5]);
+                let n = &path[11..path.len() - 5];
+                let generated_code = self.generate_flags(n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/protos/") {
-                let fn_name = &path[12..path.len() - 5];
-                let generated_code = self.generate_fn_prototype(&fn_name);
-                let a = self.fn_attributes(&fn_name);
-                if !a.is_empty() {
-                    additional_attributes = Some(a);
-                }
+                let n = &path[12..path.len() - 5];
+                let generated_code = self.generate_fn_prototype(&n);
+                additional_attributes += &self.fn_attributes(&n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/enums/") {
-                let generated_code = self.generate_enum(&path[11..path.len() - 5]);
+                let n = &path[11..path.len() - 5];
+                let generated_code = self.generate_enum(n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/basetypes/") {
-                let generated_code = self.generate_basetype(&path.strip_prefix("/api/basetypes/").unwrap().strip_suffix(".adoc").unwrap());
+                let n = path
+                    .strip_prefix("/api/basetypes/")
+                    .unwrap()
+                    .strip_suffix(".adoc")
+                    .unwrap();
+                let generated_code = self.generate_basetype(&n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/handles/") {
-                let generated_code = self.generate_handles(&path.strip_prefix("/api/handles/").unwrap().strip_suffix(".adoc").unwrap());
+                let n = path
+                    .strip_prefix("/api/handles/")
+                    .unwrap()
+                    .strip_suffix(".adoc")
+                    .unwrap();
+                let generated_code = self.generate_handles(n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/defines/") {
-                let generated_code = self.generate_define(&path.strip_prefix("/api/defines/").unwrap().strip_suffix(".adoc").unwrap());
+                let n = path
+                    .strip_prefix("/api/defines/")
+                    .unwrap()
+                    .strip_suffix(".adoc")
+                    .unwrap();
+                let generated_code = self.generate_define(&n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/funcpointers/") {
-                let generated_code = self.generate_fn_ptr(&path.strip_prefix("/api/funcpointers/").unwrap().strip_suffix(".adoc").unwrap());
+                let n = path
+                    .strip_prefix("/api/funcpointers/")
+                    .unwrap()
+                    .strip_suffix(".adoc")
+                    .unwrap();
+                let generated_code = self.generate_fn_ptr(&n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else {
                 println!("Unknown path: {:?}", path);
-            }
+                continue;
+            };
         }
         let changed = !replacements.is_empty();
         for (key, replacement) in replacements.into_iter() {
             *file = file.replace(&key, &replacement);
         }
-        if let Some(additional_attributes) = additional_attributes {
-            *file = "---\n".to_string() + &additional_attributes + file.strip_prefix("---\n").unwrap();
+        if !additional_attributes.is_empty() {
+            *file =
+                "---\n".to_string() + &additional_attributes + file.strip_prefix("---\n").unwrap();
         }
         changed
     }
@@ -168,23 +313,51 @@ impl Converter {
         // object_type: DebugReportObjectTypeEXT, object: u64, location: usize, message_code: i32, p_layer_prefix: *const c_char, p_message: *const c_char, p_user_data: *mut c_void) -> Bool32>;
 
         let (code, markup) = match &ty.spec {
-            vk_parse::TypeSpec::Code(code) => {
-                (code.code.as_str(), code.markup.as_slice())
-            },
+            vk_parse::TypeSpec::Code(code) => (code.code.as_str(), code.markup.as_slice()),
             _ => unimplemented!(),
         };
-        let return_type = Regex::new(r"typedef +(.+) +\(").unwrap().captures(code).unwrap().get(1).unwrap().as_str();
+        let return_type = Regex::new(r"typedef +(.+) +\(")
+            .unwrap()
+            .captures(code)
+            .unwrap()
+            .get(1)
+            .unwrap()
+            .as_str();
         let return_type = convert_c_type_to_rust(return_type);
-        let members = code.split("\n").skip(1).zip(markup.iter().skip(1)).map(|(line, markup)| {
-            let variable_name = Regex::new(r".* (\w+)[,\);]*").unwrap().captures(line).unwrap().get(1).unwrap().as_str().trim();
-            let type_name = Regex::new(r"(.*) +\w+[,\);]*").unwrap().captures(line).unwrap().get(1).unwrap().as_str().trim();
-            (variable_name.to_snake_case(), convert_c_type_to_rust(type_name))
-        })
-        .fold(String::new(), |a, (variable_name, type_name)| a + "        " + &variable_name + ": " + &type_name + ",\n")
-        .trim_end()
-        .to_string();
-        
-        format!("::code-group
+        let members = code
+            .split("\n")
+            .skip(1)
+            .zip(markup.iter().skip(1))
+            .map(|(line, markup)| {
+                let variable_name = Regex::new(r".* (\w+)[,\);]*")
+                    .unwrap()
+                    .captures(line)
+                    .unwrap()
+                    .get(1)
+                    .unwrap()
+                    .as_str()
+                    .trim();
+                let type_name = Regex::new(r"(.*) +\w+[,\);]*")
+                    .unwrap()
+                    .captures(line)
+                    .unwrap()
+                    .get(1)
+                    .unwrap()
+                    .as_str()
+                    .trim();
+                (
+                    variable_name.to_snake_case(),
+                    convert_c_type_to_rust(type_name),
+                )
+            })
+            .fold(String::new(), |a, (variable_name, type_name)| {
+                a + "        " + &variable_name + ": " + &type_name + ",\n"
+            })
+            .trim_end()
+            .to_string();
+
+        format!(
+            "::code-group
 ```c [C]
 {code}
 ```
@@ -201,23 +374,20 @@ pub type {name} = Option<
     fn generate_define(&self, name: &str) -> String {
         let ty = &self.types[name];
         let code = match &ty.spec {
-            vk_parse::TypeSpec::Code(code) => {
-                code.code.as_str()
-            },
+            vk_parse::TypeSpec::Code(code) => code.code.as_str(),
             _ => unimplemented!(),
         };
-        return format!("```c
+        return format!(
+            "```c
 {code}
 ```
 "
-        )
+        );
     }
     fn generate_handles(&self, name: &str) -> String {
         let ty = &self.types[name];
         let code = match &ty.spec {
-            vk_parse::TypeSpec::Code(code) => {
-                code.code.as_str()
-            },
+            vk_parse::TypeSpec::Code(code) => code.code.as_str(),
             _ => unimplemented!(),
         };
         let rs_name = name.strip_prefix("Vk").unwrap();
@@ -232,21 +402,19 @@ pub struct {rs_name}(_);
 ```
 ::
 "
-        )
+        );
     }
     fn generate_basetype(&self, name: &str) -> String {
         let ty = &self.types[name];
         let code = match &ty.spec {
-            vk_parse::TypeSpec::Code(code) => {
-                code.code.as_str()
-            },
+            vk_parse::TypeSpec::Code(code) => code.code.as_str(),
             _ => unimplemented!(),
         };
         return format!(
             "```c
 {code}
 ```"
-        )
+        );
     }
     fn generate_enum(&self, name: &str) -> String {
         if !self.enums.contains_key(name) {
@@ -403,9 +571,7 @@ impl {rs_name} {{
         let params = command
             .params
             .iter()
-            .map(|a| {
-                &a.definition.code
-            })
+            .map(|a| &a.definition.code)
             .fold(String::new(), |a, b| a + "    " + &b + ",\n");
 
         let rs_params = command
@@ -415,9 +581,11 @@ impl {rs_name} {{
                 use generator::FieldExt;
                 let raw_ty = a.definition.type_name.as_ref().unwrap();
                 let rs_type = a.type_tokens(true, None).to_string();
-                let mut rs_type = rs_type.replace("* const", "*const").replace("* mut", "*mut");
+                let mut rs_type = rs_type
+                    .replace("* const", "*const")
+                    .replace("* mut", "*mut");
                 let rs_name = a.param_ident();
-                
+
                 if raw_ty.starts_with("Vk") {
                     let stripped = raw_ty.strip_prefix("Vk").unwrap();
                     rs_type = rs_type.replace(&stripped, &("vk::".to_string() + stripped));
@@ -513,7 +681,10 @@ type {rs_name} = {rs_alias};
                     .iter()
                     .map(|member| match member {
                         vk_parse::TypeMember::Comment(comment) => format!("// {comment}"),
-                        vk_parse::TypeMember::Definition(def) => Regex::new(r" +").unwrap().replace_all(&def.code, " ").to_string(),
+                        vk_parse::TypeMember::Definition(def) => Regex::new(r" +")
+                            .unwrap()
+                            .replace_all(&def.code, " ")
+                            .to_string(),
                         _ => todo!(),
                     })
                     .fold(String::new(), |a, b| a + "    " + &b + ";\n")
@@ -525,11 +696,11 @@ type {rs_name} = {rs_alias};
                         vk_parse::TypeMember::Comment(comment) => format!("/// {comment}"),
                         vk_parse::TypeMember::Definition(def) => {
                             use generator::FieldExt;
-                            
+
                             let element: vkxml::StructElement = member.clone().into();
                             let field = match element {
                                 vkxml::StructElement::Member(field) => field,
-                                _ => unreachable!()
+                                _ => unreachable!(),
                             };
 
                             let raw_ty = def
