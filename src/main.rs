@@ -113,6 +113,7 @@ impl Converter {
     fn convert_file(&self, file: &mut String) -> bool {
         let regex = Regex::new(r"\[\{generated\}(.*)\]\(\{generated\}(.*)\)").unwrap();
         let mut replacements = HashMap::new();
+        let mut additional_attributes: Option<String> = None;
         for capture in regex.captures_iter(file) {
             let path = capture.get(1).unwrap().as_str().to_string();
             let path = path.replace("\\_", "_");
@@ -124,7 +125,12 @@ impl Converter {
                 let generated_code = self.generate_flags(&path[11..path.len() - 5]);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/protos/") {
-                let generated_code = self.generate_fn_prototype(&path[12..path.len() - 5]);
+                let fn_name = &path[12..path.len() - 5];
+                let generated_code = self.generate_fn_prototype(&fn_name);
+                let a = self.fn_attributes(&fn_name);
+                if !a.is_empty() {
+                    additional_attributes = Some(a);
+                }
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
             } else if path.starts_with("/api/enums/") {
                 let generated_code = self.generate_enum(&path[11..path.len() - 5]);
@@ -148,6 +154,9 @@ impl Converter {
         let changed = !replacements.is_empty();
         for (key, replacement) in replacements.into_iter() {
             *file = file.replace(&key, &replacement);
+        }
+        if let Some(additional_attributes) = additional_attributes {
+            *file = "---\n".to_string() + &additional_attributes + file.strip_prefix("---\n").unwrap();
         }
         changed
     }
@@ -355,6 +364,27 @@ impl {rs_name} {{
         );
         result
     }
+
+    fn fn_attributes(&self, name: &str) -> String {
+        let mut attributes = String::new();
+        let command = &self.commands[name];
+        if let Some(cmdbufferlevel) = &command.cmdbufferlevel {
+            attributes += &format!("cmd_buf_level: [{cmdbufferlevel}]\n");
+        }
+        if let Some(render_pass_scope) = &command.renderpass {
+            attributes += &format!("render_pass_scope: {render_pass_scope}\n");
+        }
+        if let Some(video_coding_scope) = &command.videocoding {
+            attributes += &format!("video_coding_scope: {video_coding_scope}\n");
+        }
+        if let Some(supported_queue_types) = &command.queues {
+            attributes += &format!("supported_queue_types: [{supported_queue_types}]\n");
+        }
+        if let Some(tasks) = &command.tasks {
+            attributes += &format!("tasks: [{tasks}]\n");
+        }
+        attributes
+    }
     fn generate_fn_prototype(&self, name: &str) -> String {
         let command = &self.commands[name];
         let return_type = command
@@ -479,23 +509,6 @@ type {rs_name} = {rs_alias};
             }
             vk_parse::TypeSpec::Code(_) => todo!(),
             vk_parse::TypeSpec::Members(members) => {
-                let max_type_len = members
-                    .iter()
-                    .map(|member| match member {
-                        vk_parse::TypeMember::Comment(_) => 0,
-                        vk_parse::TypeMember::Definition(def) => def
-                            .markup
-                            .iter()
-                            .filter_map(|a| match a {
-                                vk_parse::TypeMemberMarkup::Type(t) => Some(t.len()),
-                                _ => None,
-                            })
-                            .next()
-                            .unwrap(),
-                        _ => todo!(),
-                    })
-                    .max()
-                    .unwrap();
                 let c_members = members
                     .iter()
                     .map(|member| match member {

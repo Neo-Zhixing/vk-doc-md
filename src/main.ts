@@ -17,7 +17,7 @@ import discoverRefpages from './discoverRefpages.js';
 import Asciidoctor from '@asciidoctor/core'
 // @ts-ignore
 import docbookConverter from '@asciidoctor/docbook-converter'
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { writeFile } from 'fs/promises';
 
 function docbookRemovePaddingNewlines(i: xast.RootContent[]) {
@@ -217,8 +217,8 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
         if (node.name === 'sidebar') {
             docbookRemovePaddingNewlines(node.children);
             const title = node.children.find(a => a.type === 'element' && a.name === 'title');
-            const titleText = ((title as xast.Element).children[0] as xast.Text).value;
-            if (titleText === 'Valid Usage') {
+            let titleText = ((title as xast.Element).children[0] as xast.Text).value;
+            if (titleText === 'Valid Usage' || titleText === 'Valid Usage (Implicit)') {
                 const list = node.children.find(a => a.type === 'element' && a.name === 'itemizedlist');
                 if (!list || list.type !== 'element') {
                     return [];
@@ -226,7 +226,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                 return [
                     <mdast.Text> {
                         type: 'text',
-                        value: '\n::validity-group{name="Valid Usage"}\n'
+                        value: `\n::validity-group{name="${titleText}"}\n`
                     },
                     ...list.children.flatMap(j => docbookRefblockValidityConvert(j)),
                     <mdast.Text> {
@@ -234,18 +234,38 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                         value: '\n::\n'
                     },
                 ]
-            } else {
+            } else if (titleText === '{externsynctitle}') {
+                const list = node.children.find(a => a.type === 'element' && a.name === 'itemizedlist');
+                if (!list || list.type !== 'element') {
+                    return [];
+                }
                 return [
                     <mdast.Text> {
                         type: 'text',
-                        value: '\n::callout\n'
+                        value: '\n::validity-box\n'
                     },
-                    ...node.children.flatMap(j => docbookConvertNode(j)),
+                    <mdast.Heading> {
+                        type: 'heading',
+                        depth: 3,
+                        children: [
+                            <mdast.Text> {
+                                type: 'text',
+                                value: 'Host Synchronization'
+                            },
+                        ]
+                    },
+                    <mdast.Text> {
+                        type: 'text',
+                        value: '\n'
+                    },
+                    ...docbookConvertNode(list),
                     <mdast.Text> {
                         type: 'text',
                         value: '\n::\n'
                     },
                 ]
+            } else {
+                return []
             }
         }
     }
@@ -271,11 +291,13 @@ function docbookRefpage(docbook: xast.Root): mdast.RootContent[] {
 }
 
 async function main() {
-    // @ts-ignore
+    let should_skip: boolean = false;
+
+
     const processor = Asciidoctor();
     docbookConverter.register();
     processor.Extensions.register(function() {
-        for (const normativeKeyword of ['can', 'cannot', 'may', 'must', 'optional', 'required', 'should']) {
+        for (const normativeKeyword of ['can', 'cannot', 'may', 'must', 'optional', 'optionally', 'required', 'should']) {
             this.inlineMacro(function() {
                 this.named(normativeKeyword);
                 // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L239
@@ -293,34 +315,94 @@ async function main() {
                 return this.createInline(parent, 'quoted', target, { type: 'monospaced' })
             })
         })
-        for (const macro of ['fname', 'sname', 'ename']) {
+        this.inlineMacro(function() {
+            this.named('ptext');
+            // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L239
+            this.match(/ptext:([\w\*]+((\.|&#8594;)[\w\*]+)*)/);
+            this.process((parent: any, target: any) => {
+                return this.createInline(parent, 'quoted', target, { type: 'monospaced' })
+            })
+        })
+        this.inlineMacro(function() {
+            this.named('code');
+            // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L239
+            this.match(/code:(\w+([.*]\w+)*\**)/);
+            this.process((parent: any, target: any) => {
+                return this.createInline(parent, 'quoted', target, { type: 'monospaced' })
+            })
+        })
+        for (const macro of ['ftext', 'stext', 'etext']) {
             this.inlineMacro(function() {
                 this.named(macro);
-                // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
-                this.match(new RegExp(macro + ':(\\w+)'))
+                // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L239
+                this.match(new RegExp(macro + ':([\\w\\*]+)'));
                 this.process((parent: any, target: any) => {
                     return this.createInline(parent, 'quoted', target, { type: 'monospaced' })
                 })
             })
         }
+        for (const macro of ['fname', 'sname', 'ename', 'dname', 'tname']) {
+            this.inlineMacro(function() {
+                this.named(macro);
+                // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
+                this.match(new RegExp(macro + ':([-\\w]+)'))
+                this.process((parent: any, target: any) => {
+                    return this.createInline(parent, 'quoted', target, { type: 'monospaced' })
+                })
+            })
+        }
+        for (const macro of ['flink', 'slink', 'elink', 'reflink', 'apiext', 'dlink', 'tlink', 'basetype']) {
+            this.inlineMacro(function() {
+                this.named(macro);
+                // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
+                this.match(new RegExp(macro + ':(\\w+)'))
+                this.process((parent: any, target: any) => {
+                    return this.createInline(parent, 'anchor', target, { type: 'link', target: '/man/' + target })
+                })
+            })
+        }
+        for (const macro of ['attr', 'tag']) {
+            this.inlineMacro(function() {
+                this.named(macro);
+                // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
+                this.match(new RegExp(macro + ':(\\w+)'))
+                this.process((parent: any, target: any) => {
+                    return this.createInline(parent, 'quoted', target, { type: 'strong' })
+                })
+            })
+        }
         this.includeProcessor(function () {
             this.handles((target: string) => {
-              return target.startsWith('{chapters}')
+              return target.startsWith('{chapters}') || target.startsWith('{generated}/validity/')
             })
             this.process((doc: any, reader: any, target: string, attrs: any) => {
-                const path = target.replace('{chapters}', './Vulkan-Docs/chapters');
+                const path = target.replace('{chapters}', './Vulkan-Docs/chapters').replace('{generated}', './Vulkan-Docs/gen');
+                if (!existsSync(path)) {
+                    console.log("referenced file not found: ", path)
+                    should_skip = true;
+                    return;
+                }
                 const file = readFileSync(path, 'utf-8');
-              return reader.pushInclude([file], target, target, 1, attrs)
+                return reader.pushInclude(file, target, target, 1, attrs)
             })
         })
     })
 
     for await (const refpage of discoverRefpages()) {
-        const page = processor.convert(refpage.content, {
-            backend: 'docbook'
-        });
-        
         console.log('parsing', refpage.name)
+        should_skip = false;
+        const page = processor.convert(refpage.content, {
+            backend: 'docbook',
+            attributes: {
+                'externsyncprefix': 'Host access to',
+                times: '×'
+            }
+        });
+        if (should_skip) {
+            console.log('skipping', refpage.name)
+            continue;
+        }
+        
         let contentXast;
         try {
         contentXast = fromXml(`<root>${page}</root>`);
