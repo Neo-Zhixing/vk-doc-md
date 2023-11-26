@@ -1,5 +1,5 @@
 use core::fmt;
-use heck::{ToShoutySnakeCase, ToSnakeCase};
+use heck::{ToShoutySnakeCase, ToSnakeCase, ToLowerCamelCase};
 use std::{
     collections::HashMap,
     io::{Read, Seek, Write},
@@ -175,7 +175,7 @@ impl Converter {
         .trim_end()
         .to_string();
         
-        let result =  format!("::code-group
+        format!("::code-group
 ```c [C]
 {code}
 ```
@@ -187,8 +187,7 @@ pub type {name} = Option<
 >;
 ```
 ::"
-        );
-        result
+        )
     }
     fn generate_define(&self, name: &str) -> String {
         let ty = &self.types[name];
@@ -365,34 +364,17 @@ impl {rs_name} {{
             .map(|s| s.as_str())
             .unwrap_or("");
         let fn_name = command.proto.name.as_str();
-        let rs_fn_name = &fn_name[2..fn_name.len()];
-        let rs_fn_name = rs_fn_name.to_shouty_snake_case();
-        let max_type_len = command
-            .params
-            .iter()
-            .map(|a| {
-                a.definition
-                    .type_name
-                    .as_ref()
-                    .map(String::len)
-                    .unwrap_or(0)
-            })
-            .max()
-            .unwrap_or(0);
+        let rs_fn_name = fn_name.strip_prefix("vk").unwrap().to_snake_case();
+        let rs_ret_ty = if return_type == "void" {
+            String::new()
+        } else {
+            " -> ".to_string() + convert_c_type_to_rust(return_type).as_str()
+        };
         let params = command
             .params
             .iter()
             .map(|a| {
-                let typename = a
-                    .definition
-                    .type_name
-                    .as_ref()
-                    .cloned()
-                    .unwrap_or(String::new());
-                let len = typename.len();
-                typename
-                    + &(0..max_type_len - len + 8).map(|_| ' ').collect::<String>()
-                    + &a.definition.name
+                &a.definition.code
             })
             .fold(String::new(), |a, b| a + "    " + &b + ",\n");
 
@@ -400,15 +382,18 @@ impl {rs_name} {{
             .params
             .iter()
             .map(|a| {
-                let typename = a
-                    .definition
-                    .type_name
-                    .as_ref()
-                    .map(|a| a.as_str())
-                    .unwrap_or("");
-                let rs_typename = convert_c_type_to_rust(typename);
-                let rs_name = a.definition.name.as_str().to_shouty_snake_case();
-                format!("{rs_name}: {rs_typename}")
+                use generator::FieldExt;
+                let raw_ty = a.definition.type_name.as_ref().unwrap();
+                let rs_type = a.type_tokens(true, None).to_string();
+                let mut rs_type = rs_type.replace("* const", "*const").replace("* mut", "*mut");
+                let rs_name = a.param_ident();
+                
+                if raw_ty.starts_with("Vk") {
+                    let stripped = raw_ty.strip_prefix("Vk").unwrap();
+                    rs_type = rs_type.replace(&stripped, &("vk::".to_string() + stripped));
+                }
+
+                format!("{rs_name}: {rs_type}")
             })
             .fold(String::new(), |a, b| a + "    " + &b + ",\n");
         let params = params[..params.len() - 2].to_string();
@@ -420,7 +405,7 @@ impl {rs_name} {{
 ```
 ```rs [Rust]
 pub fn {rs_fn_name}(
-{rs_params});
+{rs_params}){rs_ret_ty};
 ```
 ::"
         )
@@ -515,22 +500,7 @@ type {rs_name} = {rs_alias};
                     .iter()
                     .map(|member| match member {
                         vk_parse::TypeMember::Comment(comment) => format!("// {comment}"),
-                        vk_parse::TypeMember::Definition(def) => def
-                            .markup
-                            .iter()
-                            .map(|markup| match markup {
-                                vk_parse::TypeMemberMarkup::Type(a) => {
-                                    a.clone()
-                                        + &(0..max_type_len - a.len() + 4)
-                                            .map(|_| ' ')
-                                            .collect::<String>()
-                                }
-                                vk_parse::TypeMemberMarkup::Name(a) => a.clone(),
-                                vk_parse::TypeMemberMarkup::Enum(a) => a.clone(),
-                                vk_parse::TypeMemberMarkup::Comment(a) => a.clone(),
-                                _ => todo!(),
-                            })
-                            .fold(String::new(), |a, b| a + &b),
+                        vk_parse::TypeMember::Definition(def) => Regex::new(r" +").unwrap().replace_all(&def.code, " ").to_string(),
                         _ => todo!(),
                     })
                     .fold(String::new(), |a, b| a + "    " + &b + ";\n")
@@ -541,7 +511,15 @@ type {rs_name} = {rs_alias};
                     .map(|member| match member {
                         vk_parse::TypeMember::Comment(comment) => format!("/// {comment}"),
                         vk_parse::TypeMember::Definition(def) => {
-                            let ty = def
+                            use generator::FieldExt;
+                            
+                            let element: vkxml::StructElement = member.clone().into();
+                            let field = match element {
+                                vkxml::StructElement::Member(field) => field,
+                                _ => unreachable!()
+                            };
+
+                            let raw_ty = def
                                 .markup
                                 .iter()
                                 .filter_map(|markup| match markup {
@@ -550,7 +528,6 @@ type {rs_name} = {rs_alias};
                                 })
                                 .next()
                                 .unwrap_or("unknown");
-                            let ty = convert_c_type_to_rust(ty);
                             let name = def
                                 .markup
                                 .iter()
@@ -560,16 +537,13 @@ type {rs_name} = {rs_alias};
                                 })
                                 .next()
                                 .unwrap_or("unknown");
-                            let name = name.to_shouty_snake_case();
-                            let e = def
-                                .markup
-                                .iter()
-                                .filter_map(|markup| match markup {
-                                    vk_parse::TypeMemberMarkup::Enum(a) => Some(a.as_str()),
-                                    _ => None,
-                                })
-                                .next()
-                                .unwrap_or("unknown");
+                            let name = name.to_snake_case();
+                            let ty = field.type_tokens(true, None).to_string();
+                            let mut ty = ty.replace("* const", "*const").replace("* mut", "*mut");
+                            if raw_ty.starts_with("Vk") {
+                                let stripped = raw_ty.strip_prefix("Vk").unwrap();
+                                ty = ty.replace(&stripped, &("vk::".to_string() + stripped));
+                            }
                             let comment = def
                                 .markup
                                 .iter()
@@ -590,6 +564,7 @@ type {rs_name} = {rs_alias};
                     .fold(String::new(), |a, b| a + "    " + &b + ",\n")
                     .trim_end()
                     .to_string();
+                let rs_name = name.strip_prefix("Vk").unwrap();
                 format!(
                     "::code-group
 ```c [C]
@@ -598,7 +573,7 @@ typedef struct {name} {{
 }} {name};
 ```
 ```rs [Rust]
-pub struct {name} {{
+pub struct {rs_name} {{
 {rs_members}
 }}
 ```
@@ -607,10 +582,6 @@ pub struct {name} {{
             }
             _ => todo!(),
         }
-    }
-
-    fn generate_validity_struct(&self, name: &str) {
-        let ty = &self.types[name];
     }
 }
 

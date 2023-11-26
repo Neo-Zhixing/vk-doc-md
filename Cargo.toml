@@ -9,3 +9,5 @@ edition = "2021"
 vk-parse = "0.12"
 regex = "1.10"
 heck = "0.4"
+vkxml = "0.3"
+generator = { git = "https://github.com/ash-rs/ash" }
