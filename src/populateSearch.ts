@@ -46,14 +46,15 @@ async function main() {
 
         
         const yaml = parse(yamlNode.value);
-        const documents = parsed.children.map(paragraph => {
+        const documents = parsed.children.map((paragraph, i) => {
             const mdString = toMarkdown(paragraph, {
                 extensions: [frontmatterToMarkdown(), gfmToMarkdown()]
             });
             const doc: any = {
                 content: mdString,
                 description: yaml.description,
-                id: yaml.title,
+                title: yaml.title,
+                id: yaml.title + '-' + i,
                 parent: yaml.parent?.split(',').map(a => a.trim()),
                 type: yaml.type, 
             };
