@@ -13,7 +13,7 @@ fn main() {
     assert!(_errors.is_empty());
     let converter = Converter::new(registry);
 
-    for mdfile in std::fs::read_dir("./dist").unwrap() {
+    for mdfile in std::fs::read_dir("./dist/man").unwrap() {
         let mdfile = mdfile.unwrap();
         let mut file = std::fs::OpenOptions::new()
             .read(true)

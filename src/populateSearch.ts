@@ -12,7 +12,7 @@ import { parse } from 'yaml';
 
 
 async function main() {
-    const rootPath = './dist/';
+    const rootPath = './dist/man/';
     const files = await readdir(rootPath);
 
     const meiliClient = new MeiliSearch({
@@ -56,7 +56,8 @@ async function main() {
                 title: yaml.title,
                 id: yaml.title + '-' + i,
                 parent: yaml.parent?.split(',').map(a => a.trim()),
-                type: yaml.type, 
+                type: yaml.type,
+                url: '/man/' + yaml.title,
             };
             for ( const key of ['cmd_buf_level', 'render_pass_scope', 'supported_queue_types', 'tasks', 'video_coding_scope']) {
                 if (yaml[key]) {

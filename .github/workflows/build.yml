@@ -50,11 +50,11 @@ jobs:
 
 
       - name: Build Refpages
-        run: mkdir dist && pnpm run gen
+        run: pnpm run gen
       - name: Refpages generate code
         run: cargo run --release
       - name: Zipup md pages
-        run: mkdir public && cd public && zip dist ../dist/*.md
+        run: mkdir public && cd public && zip -r dist ../dist
 
       - name: Reindex Meilisearch
         run: pnpm run populate-search

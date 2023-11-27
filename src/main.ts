@@ -18,7 +18,7 @@ import Asciidoctor from '@asciidoctor/core'
 // @ts-ignore
 import docbookConverter from '@asciidoctor/docbook-converter'
 import { existsSync, readFileSync } from "fs";
-import { writeFile } from 'fs/promises';
+import { writeFile, mkdir } from 'fs/promises';
 
 function docbookRemovePaddingNewlines(i: xast.RootContent[]) {
     const first = i[0];
@@ -31,7 +31,7 @@ function docbookRemovePaddingNewlines(i: xast.RootContent[]) {
     }
 }
 
-function docbookRefblockValidityConvert(node: xast.ElementContent): mdast.RootContent[] {
+function docbookRefblockValidityConvert(node: xast.ElementContent, level: number): mdast.RootContent[] {
     if (node.type != 'element') {
         return []
     }
@@ -57,7 +57,7 @@ function docbookRefblockValidityConvert(node: xast.ElementContent): mdast.RootCo
                 type: 'text',
                 value: `\n::validity-field{name="${name}"}\n`
             },
-            ...rest.flatMap(a => docbookConvertNode(a)),
+            ...rest.flatMap(a => docbookConvertNode(a, level)),
             <mdast.Text> {
                 type: 'text',
                 value: '\n::\n'
@@ -68,7 +68,7 @@ function docbookRefblockValidityConvert(node: xast.ElementContent): mdast.RootCo
     return []
 }
 
-function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
+function docbookConvertNode(node: xast.ElementContent, level: number): mdast.RootContent[] {
     if (node.type === 'text') {
         if (node.value === '\n') {
             node.value = '\n\n';
@@ -82,13 +82,14 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
         if (node.name === 'simpara') {
             return [<mdast.Paragraph>{
                 type: 'paragraph',
-                children: node.children.flatMap(i => docbookConvertNode(i))
+                children: node.children.flatMap(i => docbookConvertNode(i, level))
             }]
         }
         if (node.name === 'title') {
             return [<mdast.Heading>{
                 type: 'heading',
-                children: node.children.flatMap(i => docbookConvertNode(i))
+                depth: level + 1,
+                children: node.children.flatMap(i => docbookConvertNode(i, level))
             }]
         }
         if (node.name === 'superscript') {
@@ -97,7 +98,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                     type: 'text',
                     value: `<sup>`
                 },
-                ...node.children.flatMap(i => docbookConvertNode(i)),
+                ...node.children.flatMap(i => docbookConvertNode(i, level)),
                 <mdast.Text>{
                     type: 'text',
                     value: `</sup>`
@@ -110,7 +111,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                     type: 'text',
                     value: `<sub>`
                 },
-                ...node.children.flatMap(i => docbookConvertNode(i)),
+                ...node.children.flatMap(i => docbookConvertNode(i, level)),
                 <mdast.Text>{
                     type: 'text',
                     value: `</sub>`
@@ -128,21 +129,27 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                 lang: node.attributes.language
             }]
         }
+        if (node.name === 'section')  {
+            return node.children.flatMap(i => docbookConvertNode(i, level + 1))
+        }
+        if (node.name === 'table')  {
+            return [] // TODO
+        }
         if (node.name === 'emphasis') {
             return [<mdast.Emphasis>{
                 type: 'emphasis',
-                children: node.children.flatMap(i => docbookConvertNode(i))
+                children: node.children.flatMap(i => docbookConvertNode(i, level))
             }]
         }
         
         if (node.name === 'quote') {
             return [<mdast.Blockquote>{
                 type: 'blockquote',
-                children: node.children.flatMap(i => docbookConvertNode(i))
+                children: node.children.flatMap(i => docbookConvertNode(i, level))
             }]
         }
         if (node.name === 'phrase') {
-            return node.children.flatMap(i => docbookConvertNode(i))
+            return node.children.flatMap(i => docbookConvertNode(i, level))
         }
         if (node.name === 'literal') {
             if (node.children.length === 1 && node.children[0].type === 'text') {
@@ -167,13 +174,13 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
         if (node.name === 'link') {
             if (node.attributes.linkend) {
                 // TODO
-                return node.children.flatMap(i => docbookConvertNode(i));
+                return node.children.flatMap(i => docbookConvertNode(i, level));
             }
 
             const href = node.attributes['xl:href']
             return [<mdast.Link> {
                 type: 'link',
-                children: node.children.flatMap(i => docbookConvertNode(i)),
+                children: node.children.flatMap(i => docbookConvertNode(i, level)),
                 url: href
             }]
         }
@@ -188,7 +195,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                     docbookRemovePaddingNewlines(i.children);
                     return <mdast.ListItem> {
                         type: 'listItem',
-                        children: i.children.flatMap(j => docbookConvertNode(j))
+                        children: i.children.flatMap(j => docbookConvertNode(j, level))
                     }
                 }).filter(i => !!i)
             }]
@@ -207,7 +214,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                     type: 'text',
                     value: '\n::note\n'
                 },
-                ...node.children.flatMap(j => docbookConvertNode(j)),
+                ...node.children.flatMap(j => docbookConvertNode(j, level)),
                 <mdast.Text> {
                     type: 'text',
                     value: '\n::\n'
@@ -228,7 +235,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                         type: 'text',
                         value: `\n::validity-group{name="${titleText}"}\n`
                     },
-                    ...list.children.flatMap(j => docbookRefblockValidityConvert(j)),
+                    ...list.children.flatMap(j => docbookRefblockValidityConvert(j, level)),
                     <mdast.Text> {
                         type: 'text',
                         value: '\n::\n'
@@ -258,7 +265,7 @@ function docbookConvertNode(node: xast.ElementContent): mdast.RootContent[] {
                         type: 'text',
                         value: '\n'
                     },
-                    ...docbookConvertNode(list),
+                    ...docbookConvertNode(list, level),
                     <mdast.Text> {
                         type: 'text',
                         value: '\n::\n'
@@ -287,10 +294,12 @@ function docbookRefpage(docbook: xast.Root): mdast.RootContent[] {
     assert(docbook.type === 'root');
     const rootElement = docbook.children[0];
     assert(rootElement.type === 'element' && rootElement.name === 'root');
-    return rootElement.children.flatMap(children => docbookConvertNode(children));
+    return rootElement.children.flatMap(children => docbookConvertNode(children, -2));
 }
 
 async function main() {
+    await mkdir('./dist/chapters', { recursive: true });
+    await mkdir('./dist/man', { recursive: true });
     let should_skip: boolean = false;
 
 
@@ -373,10 +382,12 @@ async function main() {
         }
         this.includeProcessor(function () {
             this.handles((target: string) => {
-              return target.startsWith('{chapters}') || target.startsWith('{generated}/validity/')
+              return target.startsWith('{chapters}') || target.startsWith('{generated}/validity/') || target.startsWith('{config}')
             })
             this.process((doc: any, reader: any, target: string, attrs: any) => {
-                const path = target.replace('{chapters}', './Vulkan-Docs/chapters').replace('{generated}', './Vulkan-Docs/gen');
+                const path = target.replace('{chapters}', './Vulkan-Docs/chapters')
+                .replace('{generated}', './Vulkan-Docs/gen')
+                .replace('{config}', './Vulkan-Docs/config');
                 if (!existsSync(path)) {
                     console.log("referenced file not found: ", path)
                     should_skip = true;
@@ -387,16 +398,46 @@ async function main() {
             })
         })
     })
+    
+    const vkspecDocbook = processor.convert(await readFile('./Vulkan-Docs/vkspec.adoc'), {
+        backend: 'docbook'
+    });
+    const vkspecDocbookXast = fromXml(`<root>${vkspecDocbook}</root>`);
+    const vkspecMdast = docbookRefpage(vkspecDocbookXast) ;
+    {
+        // Chunking
+        let currentChunk = []
+        let currentChunkIndex = 0;
+        let currentName = null;
+        for (const node of vkspecMdast) {
+            if (node.type === 'heading' && node.depth === 1) {
+                if (currentName) {
+                    const md = toMarkdown({
+                        type: 'root',
+                        children: currentChunk
+                    }, { extensions: [gfmToMarkdown()] })
+                    await writeFile(`./dist/chapters/${currentChunkIndex}.${currentName}.md`, md);
+                    currentChunkIndex += 1;
+                }
+                currentChunk = [];
+                const textNode = node.children[0];
+                assert(textNode.type === 'text');
+                currentName = textNode.value;
+            }
+            currentChunk.push(node);
+        }
+        const md = toMarkdown({
+            type: 'root',
+            children: currentChunk
+        }, { extensions: [gfmToMarkdown()] })
+        await writeFile(`./dist/chapters/${currentChunkIndex}.${currentName}.md`, md);
+    }
 
     for await (const refpage of discoverRefpages()) {
         console.log('parsing', refpage.name)
         should_skip = false;
         const page = processor.convert(refpage.content, {
             backend: 'docbook',
-            attributes: {
-                'externsyncprefix': 'Host access to',
-                times: '×'
-            }
         });
         if (should_skip) {
             console.log('skipping', refpage.name)
@@ -431,7 +472,7 @@ async function main() {
             ]
         }
         const md = toMarkdown(mdast, { extensions: [frontmatterToMarkdown(), gfmToMarkdown()] })
-        await writeFile(`./dist/${refpage.name}.md`, md);
+        await writeFile(`./dist/man/${refpage.name}.md`, md);
     }
 }
 main()
