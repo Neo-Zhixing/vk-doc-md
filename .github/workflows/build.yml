@@ -45,15 +45,19 @@ jobs:
           cache: pnpm
       - name: Pnpm Install
         run: pnpm install
+      - name: Build Typescript
+        run: pnpm run build
 
 
       - name: Build Refpages
-        run: mkdir dist && pnpm run exec
+        run: mkdir dist && pnpm run gen
       - name: Refpages generate code
         run: cargo run --release
       - name: Zipup md pages
         run: mkdir public && cd public && zip dist ../dist/*.md
 
+      - name: Reindex Meilisearch
+        run: pnpm run populate-search
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
@@ -65,3 +69,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v2
+

@@ -1,11 +1,10 @@
 {
   "compilerOptions": {
-    "module": "nodenext",
-    "noImplicitAny": true,
-    "removeComments": true,
-    "preserveConstEnums": true
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2021",
+    "sourceMap": true,
+    "outDir": "out",
   },
-  "files": [
-    "src/main.ts"
-  ]
+  "include": ["src/**/*"],
 }

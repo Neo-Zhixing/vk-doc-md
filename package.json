@@ -9,17 +9,23 @@
 		"mdast-util-frontmatter": "^2.0.1",
 		"mdast-util-gfm": "^3.0.0",
 		"mdast-util-to-markdown": "^2.1.0",
-		"xast-util-from-xml": "^4.0.0",
-		"yaml": "^2.3.4"
+		"xast-util-from-xml": "^4.0.0"
 	},
 	"devDependencies": {
 		"@types/mdast": "^4.0.3",
 		"@types/node": "^20.9.2",
 		"@types/xast": "^2.0.3",
-		"typescript": "^5.2.2"
+		"mdast-util-from-markdown": "^2.0.0",
+		"meilisearch": "^0.36.0",
+		"micromark-extension-frontmatter": "^2.0.0",
+		"micromark-extension-gfm": "^3.0.0",
+		"typescript": "^5.2.2",
+		"unist-util-visit-parents": "^6.0.1",
+		"yaml": "^2.3.4"
 	},
 	"scripts": {
 		"build": "tsc",
-		"exec": "tsc && node ./src/main.js"
+		"gen": "node ./out/main.js",
+		"populate-search": "node ./out/populateSearch.js"
 	}
 }
