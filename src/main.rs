@@ -27,6 +27,7 @@ fn main() {
         if changed {
             file.seek(std::io::SeekFrom::Start(0)).unwrap();
             file.write_all(mdcontent.as_bytes()).unwrap();
+            file.set_len(mdcontent.as_bytes().len() as u64).unwrap();
         }
     }
 }

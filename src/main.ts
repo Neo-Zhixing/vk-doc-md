@@ -1,13 +1,10 @@
 import { fromXml } from "xast-util-from-xml";
-import {fromHtml} from 'hast-util-from-html';
-import {toMdast} from 'hast-util-to-mdast';
 import {toMarkdown} from 'mdast-util-to-markdown';
 import {gfmToMarkdown} from 'mdast-util-gfm';
 import * as xast from 'xast';
-import { readFile, readdir, lstat} from 'fs/promises';
+import { readFile } from 'fs/promises';
 import assert from 'node:assert/strict';
 import * as mdast from 'mdast';
-import { Node as XastNode, Root as XastRoot } from 'xast';
 import { stringify as yamlStringify } from 'yaml'
 import {frontmatterToMarkdown} from 'mdast-util-frontmatter';
 
@@ -396,7 +393,6 @@ async function main() {
                 let file = readFileSync(path, 'utf-8');
                 if (attrs.tag) {
                     file = findTaggedImport(file, attrs.tag);
-                    console.log(file)
                 }
                 return reader.pushInclude(file, target, target, 1, attrs)
             })

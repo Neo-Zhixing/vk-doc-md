@@ -1,5 +1,4 @@
 import { readFile, readdir, writeFile } from "fs/promises";
-import markdownTransformer from '@nuxt/content/transformers/markdown';
 import {gfmFromMarkdown, gfmToMarkdown} from 'mdast-util-gfm';
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfm } from "micromark-extension-gfm";
