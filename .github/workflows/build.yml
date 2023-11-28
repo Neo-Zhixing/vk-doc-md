@@ -52,9 +52,6 @@ jobs:
       - name: Generate content json 
         run: pnpm run parse-refpages
 
-      - name: Reindex Meilisearch
-        run: pnpm run populate-search
-
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:
