@@ -12,6 +12,7 @@
 		"xast-util-from-xml": "^4.0.0"
 	},
 	"devDependencies": {
+		"@nuxt/content": "^2.9.0",
 		"@types/mdast": "^4.0.3",
 		"@types/node": "^20.9.2",
 		"@types/xast": "^2.0.3",
@@ -26,6 +27,7 @@
 	"scripts": {
 		"build": "tsc",
 		"gen": "node ./out/main.js",
-		"populate-search": "node ./out/populateSearch.js"
+		"populate-search": "node ./out/populateSearch.js",
+		"parse-refpages": "node ./out/parseRefpages.js"
 	}
 }

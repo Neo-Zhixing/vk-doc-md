@@ -393,7 +393,11 @@ async function main() {
                     should_skip = true;
                     return;
                 }
-                const file = readFileSync(path, 'utf-8');
+                let file = readFileSync(path, 'utf-8');
+                if (attrs.tag) {
+                    file = findTaggedImport(file, attrs.tag);
+                    console.log(file)
+                }
                 return reader.pushInclude(file, target, target, 1, attrs)
             })
         })
@@ -476,3 +480,24 @@ async function main() {
     }
 }
 main()
+
+
+function findTaggedImport(haystack: string, tag: string): string {
+    const lines = haystack.split('\n');
+
+    const includedLines: string[] = [];
+    let inside: boolean = false;
+    for (const line of lines) {
+        if (line.startsWith(`// tag::${tag}[]`)) {
+            inside = true;
+            continue;
+        }
+        if (line.endsWith(`// end::${tag}[]`)) {
+            break;
+        }
+        if (inside) {
+            includedLines.push(line);
+        }
+    }
+    return includedLines.join('\n');
+}
