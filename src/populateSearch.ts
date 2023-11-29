@@ -22,7 +22,7 @@ async function main() {
     await meiliClient.createIndex('refpages_new');
     const meiliIndex = meiliClient.index('refpages_new')
     await meiliIndex.updateDistinctAttribute('title');
-    await meiliIndex.updateSearchableAttributes(['description', 'content', 'title']);
+    await meiliIndex.updateSearchableAttributes(['description', 'content', 'title', 'shortTitle']);
 
     for (const fileName of files) {
         if (!fileName.endsWith('md')) {
@@ -53,10 +53,17 @@ async function main() {
             const mdString = toMarkdown(paragraph, {
                 extensions: [frontmatterToMarkdown(), gfmToMarkdown()]
             });
+            let shortTitle: string = '';
+            if (yaml.title.startsWith('Vk') || yaml.title.startsWith('vk')) {
+                shortTitle = yaml.title.slice(2);
+            } else {
+                shortTitle = yaml.title;
+            }
             const doc: any = {
                 content: mdString,
                 description: yaml.description,
                 title: yaml.title,
+                shortTitle: shortTitle,
                 id: yaml.title + '-' + i,
                 parent: yaml.parent?.split(',').map(a => a.trim()),
                 type: yaml.type,
