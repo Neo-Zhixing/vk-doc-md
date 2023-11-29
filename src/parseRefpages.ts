@@ -74,17 +74,21 @@ function convertXrefs(file: Root, xrefs: Map<string, string>, chapters: { title:
   visitParents(file, 'link', link => {
     if (link.url.startsWith('xref::')) {
       const name = link.url.slice(6);
-      link.url = (xrefs.get(name) || '/404') + '#' + name;
-    }
-    if (link.children.length === 1 && link.children[0].type === 'text') {
-      const name = link.children[0].value.slice(12);
-      const xrefUrl = xrefs.get(name) || '/404';
-      if (xrefUrl.startsWith('/man/')) {
-        link.children[0].value = xrefUrl.slice(5) + '#' + name;
-      } else if (xrefUrl.startsWith('/chapters/')) {
-        const chapterId = xrefUrl.slice(10);
-        const chapter = chapters[chapterId];
-        link.children[0].value = chapter.title + '#' + name;
+      if (!xrefs.has(name)) {
+        console.log('warning, ', name)
+      }
+      const xrefUrl = xrefs.get(name)
+      link.url = (xrefUrl || '/404') + '#' + name;
+
+      
+      if (link.children.length === 1 && link.children[0].type === 'text' && link.children[0].value.startsWith('::xref::name')) {
+        if (xrefUrl.startsWith('/man/')) {
+          link.children[0].value = xrefUrl.slice(5) + '#' + name;
+        } else if (xrefUrl.startsWith('/chapters/')) {
+          const chapterId = xrefUrl.slice(10);
+          const chapter = chapters[chapterId];
+          link.children[0].value = chapter.title + '#' + name;
+        }
       }
     }
   })
@@ -102,7 +106,7 @@ async function convertRefpages(xrefs: Map<string, string>, chapters: { title: st
         }
         const path = './dist/man/' + filename;
         const id = filename.slice(0, -3);
-        console.log(id)
+        //console.log(id)
         let file = await readFile(path, 'utf-8');
 
         const tree = fromMarkdown(file, {
