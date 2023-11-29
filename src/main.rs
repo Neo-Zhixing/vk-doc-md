@@ -15,6 +15,10 @@ fn main() {
 
     for mdfile in std::fs::read_dir("./dist/man").unwrap() {
         let mdfile = mdfile.unwrap();
+        if mdfile.path().extension().map(|a| a.to_str().unwrap()) != Some("md") {
+            println!("Skipped {:?}", mdfile.path());
+            continue;
+        }
         let mut file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -223,7 +227,11 @@ impl Converter {
     fn convert_file(&self, file: &mut String) -> bool {
         let name = Regex::new(r"\ntitle: (.+)\n")
             .unwrap()
-            .captures(file)
+            .captures(file);
+        if name.is_none() {
+            println!("Missing match: {}", file)
+        }
+        let name = name
             .unwrap()
             .get(1)
             .unwrap()

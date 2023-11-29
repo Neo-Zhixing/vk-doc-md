@@ -17,6 +17,7 @@ import docbookConverter from '@asciidoctor/docbook-converter'
 import { existsSync, readFileSync } from "fs";
 import { writeFile, mkdir } from 'fs/promises';
 import { text } from "stream/consumers";
+import { visitParents } from "unist-util-visit-parents";
 
 function docbookRemovePaddingNewlines(i: xast.RootContent[]) {
     const first = i[0];
@@ -78,6 +79,29 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
     }
     if (node.type === 'element') {
         if (node.name === 'simpara') {
+            if (node.attributes['xml:id']) {
+                if (node.children.length === 0) {
+                    return [<mdast.Text>{
+                        type: 'text',
+                        value: `:anchor{id="${node.attributes['xml:id']}"}`
+                    }]
+                } else {
+                    return [
+                        <mdast.Text>{
+                            type: 'text',
+                            value: `::anchor{id="${node.attributes['xml:id']}"}`
+                        },
+                        <mdast.Paragraph>{
+                            type: 'paragraph',
+                            children: node.children.flatMap(i => docbookConvertNode(i, level))
+                        },
+                        <mdast.Text>{
+                            type: 'text',
+                            value: `::`
+                        },
+                    ]
+                }
+            }
             return [<mdast.Paragraph>{
                 type: 'paragraph',
                 children: node.children.flatMap(i => docbookConvertNode(i, level))
@@ -91,8 +115,16 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             }]
         }
         if (node.name === 'xref') {
-            // TODO
-            return []
+            return [<mdast.Link> {
+                type: 'link',
+                children: [
+                    <mdast.Text> {
+                        type: 'text',
+                        value: 'xref::name::' + node.attributes.linkend
+                    }
+                ],
+                url: 'xref::' + node.attributes.linkend
+            }]
         }
         if (node.name === 'superscript') {
             if (node.children.length === 1 && node.children[0].type === 'text' && parseInt(node.children[0].value) === 1) {
@@ -137,6 +169,19 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             }]
         }
         if (node.name === 'section')  {
+            if (node.attributes['xml:id']) {
+                return [
+                    <mdast.Text>{
+                        type: 'text',
+                        value: `::anchor{id="${node.attributes['xml:id']}"}`
+                    },
+                    ...node.children.flatMap(i => docbookConvertNode(i, level)),
+                    <mdast.Text>{
+                        type: 'text',
+                        value: `::`
+                    },
+                ]
+            }
             return node.children.flatMap(i => docbookConvertNode(i, level + 1))
         }
         if (node.name === 'table')  {
@@ -168,21 +213,18 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             return node.children.flatMap(i => docbookConvertNode(i, level))
         }
         if (node.name === 'anchor') {
-            return [<mdast.Link> {
-                type: 'link',
-                children: [
-                    <mdast.Text> {
-                        type: 'text',
-                        value: node.attributes['xml:id'],
-                    }
-                ],
-                url: '#' + node.attributes['xml:id']
+            return [<mdast.Text> {
+                type: 'text',
+                value: `:anchor{id="${node.attributes['xml:id']}"}`,
             }]
         }
         if (node.name === 'link') {
             if (node.attributes.linkend) {
-                // TODO
-                return node.children.flatMap(i => docbookConvertNode(i, level));
+                return [<mdast.Link> {
+                    type: 'link',
+                    children: node.children.flatMap(i => docbookConvertNode(i, level)),
+                    url: 'xref::' + node.attributes.linkend
+                }]
             }
 
             const href = node.attributes['xl:href']
@@ -489,6 +531,7 @@ async function main() {
     });
     const vkspecDocbookXast = fromXml(`<root>${vkspecDocbook}</root>`);
     const vkspecMdast = docbookRefpage(vkspecDocbookXast) ;
+    const xrefs = new Map<string, string>();
     {
         // Chunking
         let currentChunk = []
@@ -498,6 +541,14 @@ async function main() {
         for (const node of vkspecMdast) {
             if (node.type === 'heading' && node.depth === 1) {
                 if (currentName) {
+                    visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
+                        assert(node.type === 'text');
+                        const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
+                        if (match) {
+                            const name = match[1];
+                            xrefs.set(name, '/chapters/' + currentChunkIndex)
+                        }
+                    })
                     const md = toMarkdown({
                         type: 'root',
                         children: currentChunk
@@ -516,7 +567,18 @@ async function main() {
             }
             currentChunk.push(node);
         }
-        const md = toMarkdown({
+
+        // Get xrefs
+        visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
+            assert(node.type === 'text');
+            const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
+            if (match) {
+                const name = match[1];
+                xrefs.set(name, '/chapters/' + currentChunkIndex)
+            }
+        })
+
+        const md = toMarkdown(<mdast.Root> {
             type: 'root',
             children: currentChunk
         }, { extensions: [gfmToMarkdown()] })
@@ -567,9 +629,20 @@ async function main() {
                 ...docbookRefpage(contentXast) 
             ]
         }
+        
+        // Get xrefs
+        visitParents(mdast,'text', (node) => {
+            assert(node.type === 'text');
+            const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
+            if (match) {
+                const name = match[1];
+                xrefs.set(name, '/man/' + refpage.name)
+            }
+        })
         const md = toMarkdown(mdast, { extensions: [frontmatterToMarkdown(), gfmToMarkdown()] })
         await writeFile(`./dist/man/${refpage.name}.md`, md);
     }
+    await writeFile(`./dist/xrefs.json`, JSON.stringify(Object.fromEntries(xrefs)));
 }
 main()
 
