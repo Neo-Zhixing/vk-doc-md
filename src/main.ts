@@ -89,7 +89,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                     return [
                         <mdast.Text>{
                             type: 'text',
-                            value: `::anchor{id="${node.attributes['xml:id']}"}`
+                            value: `\n::anchor{id="${node.attributes['xml:id']}"}\n`
                         },
                         <mdast.Paragraph>{
                             type: 'paragraph',
@@ -97,7 +97,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                         },
                         <mdast.Text>{
                             type: 'text',
-                            value: `::`
+                            value: `\n::\n`
                         },
                     ]
                 }
@@ -173,12 +173,12 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 return [
                     <mdast.Text>{
                         type: 'text',
-                        value: `::anchor{id="${node.attributes['xml:id']}"}`
+                        value: `\n::anchor{id="${node.attributes['xml:id']}"}\n`
                     },
                     ...node.children.flatMap(i => docbookConvertNode(i, level)),
                     <mdast.Text>{
                         type: 'text',
-                        value: `::`
+                        value: `\n::\n`
                     },
                 ]
             }
