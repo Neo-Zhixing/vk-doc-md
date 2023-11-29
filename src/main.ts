@@ -78,7 +78,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         }]
     }
     if (node.type === 'element') {
-        if (node.name === 'simpara' || node.name === 'para') {
+        if (node.name === 'simpara' || node.name === 'para' || node.name === 'formalpara') {
             if (node.attributes['xml:id']) {
                 if (node.children.length === 0) {
                     return [<mdast.Text>{
@@ -89,15 +89,11 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                     return [
                         <mdast.Text>{
                             type: 'text',
-                            value: `\n::anchor{id="${node.attributes['xml:id']}"}\n`
+                            value: `\n:anchor{id="${node.attributes['xml:id']}"}\n`
                         },
                         <mdast.Paragraph>{
                             type: 'paragraph',
                             children: node.children.flatMap(i => docbookConvertNode(i, level))
-                        },
-                        <mdast.Text>{
-                            type: 'text',
-                            value: `\n::\n`
                         },
                     ]
                 }
@@ -173,13 +169,9 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 return [
                     <mdast.Text>{
                         type: 'text',
-                        value: `\n::anchor{id="${node.attributes['xml:id']}"}\n`
+                        value: `\n:anchor{id="${node.attributes['xml:id']}"}\n`
                     },
-                    ...node.children.flatMap(i => docbookConvertNode(i, level)),
-                    <mdast.Text>{
-                        type: 'text',
-                        value: `\n::\n`
-                    },
+                    ...node.children.flatMap(i => docbookConvertNode(i, level+1)),
                 ]
             }
             return node.children.flatMap(i => docbookConvertNode(i, level + 1))
@@ -545,7 +537,6 @@ async function main() {
             if (node.type === 'heading' && node.depth === 1) {
                 if (currentName) {
                     visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
-                        assert(node.type === 'text');
                         const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
                         if (match) {
                             const name = match[1];
