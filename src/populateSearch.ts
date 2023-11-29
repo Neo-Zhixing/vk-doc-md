@@ -19,7 +19,10 @@ async function main() {
         host: 'https://search.vkdoc.net',
         apiKey: '4KsPxa8DiQCjAeCyG3MQGABbvUyAqU23',
       });
+    await meiliClient.createIndex('refpages_new');
     const meiliIndex = meiliClient.index('refpages_new')
+    await meiliIndex.updateDistinctAttribute('title');
+    await meiliIndex.updateSearchableAttributes(['description', 'content', 'title']);
 
     for (const fileName of files) {
         if (!fileName.endsWith('md')) {
