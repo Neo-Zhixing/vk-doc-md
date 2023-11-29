@@ -78,7 +78,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         }]
     }
     if (node.type === 'element') {
-        if (node.name === 'simpara') {
+        if (node.name === 'simpara' || node.name === 'para') {
             if (node.attributes['xml:id']) {
                 if (node.children.length === 0) {
                     return [<mdast.Text>{
@@ -195,10 +195,13 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         }
         
         if (node.name === 'quote') {
-            return [<mdast.Blockquote>{
-                type: 'blockquote',
-                children: node.children.flatMap(i => docbookConvertNode(i, level))
-            }]
+            if (node.children.length === 1 && node.children[0].type === 'text') {
+                return [<mdast.InlineCode> {
+                    type: 'inlineCode',
+                    value: node.children[0].value
+                }]
+            }
+            return node.children.flatMap(i => docbookConvertNode(i, level))
         }
         if (node.name === 'phrase') {
             return node.children.flatMap(i => docbookConvertNode(i, level))
