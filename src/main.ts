@@ -371,6 +371,24 @@ async function main() {
     const processor = Asciidoctor();
     docbookConverter.register();
     processor.Extensions.register(function() {
+        this.treeProcessor(function () {
+            this.process((document) => {
+                document.findBy(block => {
+                    if (block.context === 'open' && block.getAttribute('refpage')) {
+                        const blocks = block.getBlocks();
+                        blocks.length = 0;
+                        const lines = [
+                            `::refpage{name="${block.getAttribute('refpage')}" type="${block.getAttribute('type')}"}`,
+                            block.getAttribute('desc'),
+                            '::'
+                        ]
+                        blocks.push(this.createBlock(document, 'paragraph', lines.join('\n') + '\n'));
+                        return true;
+                    }
+                    return false;
+                })
+            })
+          })
         for (const normativeKeyword of ['can', 'cannot', 'may', 'must', 'optional', 'optionally', 'required', 'should']) {
             this.inlineMacro(function() {
                 this.named(normativeKeyword);
