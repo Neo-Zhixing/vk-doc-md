@@ -476,6 +476,7 @@ async function main() {
         let currentChunk = []
         let currentChunkIndex = 0;
         let currentName = null;
+        const chaptersMeta = [];
         for (const node of vkspecMdast) {
             if (node.type === 'heading' && node.depth === 1) {
                 if (currentName) {
@@ -483,7 +484,11 @@ async function main() {
                         type: 'root',
                         children: currentChunk
                     }, { extensions: [gfmToMarkdown()] })
-                    await writeFile(`./dist/chapters/${currentChunkIndex}.${currentName}.md`, md);
+                    await writeFile(`./dist/chapters/${currentChunkIndex}.md`, md);
+                    chaptersMeta.push({
+                        index: currentChunkIndex,
+                        title: currentName,
+                    })
                     currentChunkIndex += 1;
                 }
                 currentChunk = [];
@@ -497,7 +502,12 @@ async function main() {
             type: 'root',
             children: currentChunk
         }, { extensions: [gfmToMarkdown()] })
-        await writeFile(`./dist/chapters/${currentChunkIndex}.${currentName}.md`, md);
+        await writeFile(`./dist/chapters/${currentChunkIndex}.md`, md);
+        chaptersMeta.push({
+            index: currentChunkIndex,
+            title: currentName,
+        })
+        await writeFile(`./dist/chapters/index.json`, JSON.stringify(chaptersMeta));
     }
 
     for await (const refpage of discoverRefpages()) {

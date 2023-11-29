@@ -38,6 +38,36 @@ export const PROSE_TAGS = [
     'th',
     'tr'
   ]
+
+
+async function parseMd(file: string): Promise<any> {
+
+    const shikiTheme = {
+        theme: {
+            light: 'material-theme-lighter',
+            default: 'material-theme',
+            dark: 'material-theme-palenight'
+          },
+          preload: [ 'rust', 'c' ],
+    }
+    const parsed = await parseMarkdown(file, <MDCParseOptions> {
+        highlight: {
+            ...shikiTheme,
+            highlighter: async (code: string, lang: string, theme: Theme, highlights) => {
+                const shikiHighlighter = useShikiHighlighter(shikiTheme)
+                return await shikiHighlighter.getHighlightedAST(code as string, lang as any, theme as Theme, { highlights })
+              }
+          },
+          remark: { plugins: {} },
+          rehype: { options: { handlers: {} }, plugins: {
+            highlight: {
+                instance: rehypeShiki,
+            }
+          } },
+          toc: undefined
+      })
+      return parsed;
+}
   
 async function main() {
     const metadata: {
@@ -67,32 +97,7 @@ async function main() {
             parent: yaml.parent,
             type: yaml.type,
         })
-
-        const shikiTheme = {
-            theme: {
-                light: 'material-theme-lighter',
-                default: 'material-theme',
-                dark: 'material-theme-palenight'
-              },
-              preload: [ 'rust', 'c' ],
-        }
-        const parsed = await parseMarkdown(file as string, <MDCParseOptions> {
-            highlight: {
-                ...shikiTheme,
-                highlighter: async (code: string, lang: string, theme: Theme, highlights) => {
-                    const shikiHighlighter = useShikiHighlighter(shikiTheme)
-                    return await shikiHighlighter.getHighlightedAST(code as string, lang as any, theme as Theme, { highlights })
-                  }
-              },
-              remark: { plugins: {} },
-              rehype: { options: { handlers: {} }, plugins: {
-                highlight: {
-                    instance: rehypeShiki,
-                }
-              } },
-              toc: undefined
-          })
-      
+        const parsed = await parseMd(file);
           const results = {
             ...parsed.data,
             excerpt: parsed.excerpt,
@@ -108,4 +113,29 @@ async function main() {
     await writeFile('./dist/man/index.json', JSON.stringify(metadata));
 }
 
+async function chapters() {
+    for (const filename of await readdir('./dist/chapters/')) {
+        if (!filename.endsWith('.md')) {
+            continue;
+        }
+        const path = './dist/chapters/' + filename;
+        const id = filename.slice(0, -3);
+        const file = await readFile(path, 'utf-8');
+
+        const parsed = await parseMd(file);
+          const results = {
+            ...parsed.data,
+            excerpt: parsed.excerpt,
+            body: {
+              ...parsed.body,
+              toc: parsed.toc
+            },
+            _type: 'markdown',
+            _id: 'chapters-' + id
+          }
+        await writeFile(`./dist/chapters/${id}.json`, JSON.stringify(results));
+    }
+}
+
+chapters();
 main();
