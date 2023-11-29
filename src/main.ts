@@ -537,7 +537,7 @@ async function main() {
             if (node.type === 'heading' && node.depth === 1) {
                 if (currentName) {
                     visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
-                        const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
+                        const match = /:?:anchor\{id="(.+)"\}/.exec(node.value);
                         if (match) {
                             const name = match[1];
                             xrefs.set(name, '/chapters/' + currentChunkIndex)
@@ -565,7 +565,7 @@ async function main() {
         // Get xrefs
         visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
             assert(node.type === 'text');
-            const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
+            const match = /:?:anchor\{id="(.+)"\}/.exec(node.value);
             if (match) {
                 const name = match[1];
                 xrefs.set(name, '/chapters/' + currentChunkIndex)
