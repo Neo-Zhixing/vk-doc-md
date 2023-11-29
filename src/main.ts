@@ -16,6 +16,7 @@ import Asciidoctor from '@asciidoctor/core'
 import docbookConverter from '@asciidoctor/docbook-converter'
 import { existsSync, readFileSync } from "fs";
 import { writeFile, mkdir } from 'fs/promises';
+import { text } from "stream/consumers";
 
 function docbookRemovePaddingNewlines(i: xast.RootContent[]) {
     const first = i[0];
@@ -89,31 +90,40 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 children: node.children.flatMap(i => docbookConvertNode(i, level))
             }]
         }
+        if (node.name === 'xref') {
+            // TODO
+            return []
+        }
         if (node.name === 'superscript') {
-            return [
-                <mdast.Text>{
-                    type: 'text',
-                    value: `<sup>`
-                },
-                ...node.children.flatMap(i => docbookConvertNode(i, level)),
-                <mdast.Text>{
-                    type: 'text',
-                    value: `</sup>`
-                },
-            ]
+            if (node.children.length === 1 && node.children[0].type === 'text' && parseInt(node.children[0].value) === 1) {
+                // I've only seen at most one footnote being used at any given time.
+                return [
+                    <mdast.FootnoteReference>{
+                        type: 'footnoteReference',
+                        identifier: '1'
+                    },
+                ]
+            }
+            if (node.children.length === 1 && node.children[0].type === 'text') {
+                const value = node.children[0].value;
+                return [
+                    <mdast.Html>{
+                        type: 'html',
+                        value: `<sub>${value}</sub>`
+                    },
+                ]
+            }
         }
         if (node.name === 'subscript') {
-            return [
-                <mdast.Text>{
-                    type: 'text',
-                    value: `<sub>`
-                },
-                ...node.children.flatMap(i => docbookConvertNode(i, level)),
-                <mdast.Text>{
-                    type: 'text',
-                    value: `</sub>`
-                },
-            ]
+            if (node.children.length === 1 && node.children[0].type === 'text') {
+                const value = node.children[0].value;
+                return [
+                    <mdast.Html>{
+                        type: 'html',
+                        value: `<sub>${value}</sub>`
+                    },
+                ]
+            }
         }
         if (node.name === 'programlisting') {
             // cmdProcessAllSequences
@@ -155,6 +165,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                     value: node.children[0].value
                 }]
             }
+            return node.children.flatMap(i => docbookConvertNode(i, level))
         }
         if (node.name === 'anchor') {
             return [<mdast.Link> {
@@ -217,6 +228,63 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                     value: '\n::\n'
                 },
             ]
+        }
+        if (node.name === 'varlistentry') {
+            const terms = node.children.filter(a => a.type === 'element' && a.name === 'term');
+            const listitem = node.children.filter(a => a.type === 'element' && a.name === 'listitem');
+            if ((terms.length === 0 || terms.every(a => a.type === 'element' && a.children.length === 0)) && listitem.length === 1) {
+                if (listitem[0].type === 'element') {
+                    const simpara = listitem[0].children.filter(a => a.type === 'element' && a.name === 'simpara');
+                    if (simpara.length === 1 && simpara[0].type === 'element') {
+                        const phrase = simpara[0].children.filter(a => a.type === 'element' && a.name === 'phrase');
+                        if (phrase.length === 1 && phrase[0].type === 'element') {
+                            const results = phrase[0].children.flatMap(a => docbookConvertNode(a, level))
+                            return [<mdast.Paragraph> {
+                                type: 'paragraph',
+                                children: results
+                            }];
+                        }
+                    }
+                }
+            }
+            if (terms.length === 1 &&
+                listitem.length === 1 &&
+                terms[0].type === 'element' &&
+                terms[0].children.length === 1 &&
+                terms[0].children[0].type === 'text' &&
+                parseInt(terms[0].children[0].value)) {
+                const content = listitem[0];
+                assert(content.type === 'element');
+                return [
+                    <mdast.FootnoteDefinition> {
+                        type: 'footnoteDefinition',
+                        identifier: terms[0].children[0].value,
+                        children: content.children.flatMap(a => {
+                            if (a.type === 'text' && a.value.trim().length === 0) {
+                                return [];
+                            }
+                            if (a.type === 'element' && a.name === 'simpara') {
+                                return a.children.flatMap(b => docbookConvertNode(b, level))
+                            }
+                            return docbookConvertNode(a, level)
+                        })
+                    }
+                ]
+            }
+            if (terms.length > 0 && listitem.length === 1 && listitem[0].type === 'element') {
+                return [
+                    ...terms.map(a => <mdast.Heading> {
+                        type: 'heading',
+                        depth: 6,
+                        children: a.type === 'element' ? a.children.flatMap(b => docbookConvertNode(b, level)) : []
+                    }),
+                    ...listitem[0].children.flatMap(a => docbookConvertNode(a, level))
+                ]
+            }
+        }
+        if (node.name === 'variablelist') {
+            const varlists = node.children.filter(a => a.type === 'element' && a.name === 'varlistentry');
+            return varlists.flatMap(a => docbookConvertNode(a, level))
         }
         if (node.name === 'sidebar') {
             docbookRemovePaddingNewlines(node.children);
@@ -398,7 +466,6 @@ async function main() {
             })
         })
     })
-    
     const vkspecDocbook = processor.convert(await readFile('./Vulkan-Docs/vkspec.adoc'), {
         backend: 'docbook'
     });
@@ -436,7 +503,8 @@ async function main() {
     for await (const refpage of discoverRefpages()) {
         console.log('parsing', refpage.name)
         should_skip = false;
-        const page = processor.convert(refpage.content, {
+        const content = 'include::{config}/attribs.adoc[]\n' + refpage.content;
+        const page = processor.convert(content, {
             backend: 'docbook',
         });
         if (should_skip) {
