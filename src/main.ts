@@ -166,6 +166,18 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         }
         if (node.name === 'section')  {
             if (node.attributes['xml:id']) {
+                for (const i of node.children) {
+                    if (i.type === 'text' && i.value.trim().length === 0) {
+                        continue;
+                    }
+                    if (i.type === 'element' && i.name === 'title') {
+                        i.children.splice(0, 0, <mdast.Text>{
+                            type: 'text',
+                            value: '#' + node.attributes['xml:id'] + ' '
+                        });
+                        return node.children.flatMap(i => docbookConvertNode(i, level+1));
+                    }
+                }
                 return [
                     <mdast.Text>{
                         type: 'text',
@@ -526,7 +538,7 @@ async function main() {
     });
     const vkspecDocbookXast = fromXml(`<root>${vkspecDocbook}</root>`);
     const vkspecMdast = docbookRefpage(vkspecDocbookXast) ;
-    const xrefs = new Map<string, string>();
+    const xrefs = new Map<string, { url: string, title?: string }>();
     {
         // Chunking
         let currentChunk = []
@@ -540,7 +552,14 @@ async function main() {
                         const match = /:?:anchor\{id="(.+)"\}/.exec(node.value);
                         if (match) {
                             const name = match[1];
-                            xrefs.set(name, '/chapters/' + currentChunkIndex)
+                            xrefs.set(name, { url: '/chapters/' + currentChunkIndex })
+                        }
+                    })
+                    
+                    visitParents(<mdast.Root> { type: 'root', children: currentChunk},'heading', (node) => {
+                        if (node.children.length > 0 && node.children[0].type === 'text' && node.children[0].value.startsWith('#')) {
+                            const id = node.children[0].value.slice(1).trimEnd();
+                            xrefs.set(id, { url: '/chapters/' + currentChunkIndex, title: mdHeadingToString(node.children.slice(1)) })
                         }
                     })
                     const md = toMarkdown({
@@ -568,7 +587,14 @@ async function main() {
             const match = /:?:anchor\{id="(.+)"\}/.exec(node.value);
             if (match) {
                 const name = match[1];
-                xrefs.set(name, '/chapters/' + currentChunkIndex)
+                xrefs.set(name, { url: '/chapters/' + currentChunkIndex })
+            }
+        })
+        
+        visitParents(<mdast.Root> { type: 'root', children: currentChunk},'heading', (node) => {
+            if (node.children.length > 0 && node.children[0].type === 'text' && node.children[0].value.startsWith('#')) {
+                const id = node.children[0].value.slice(1).trimEnd();
+                xrefs.set(id, { url: '/chapters/' + currentChunkIndex, title: mdHeadingToString(node.children.slice(1)) })
             }
         })
 
@@ -630,7 +656,13 @@ async function main() {
             const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
             if (match) {
                 const name = match[1];
-                xrefs.set(name, '/man/' + refpage.name)
+                xrefs.set(name, { url: '/man/' + refpage.name })
+            }
+        })
+        visitParents(mdast,'heading', (node) => {
+            if (node.children.length > 0 && node.children[0].type === 'text' && node.children[0].value.startsWith('#')) {
+                const id = node.children[0].value.slice(1).trimEnd();
+                xrefs.set(id, { url: '/man/' + refpage.name, title: mdHeadingToString(node.children.slice(1)) })
             }
         })
         const md = toMarkdown(mdast, { extensions: [frontmatterToMarkdown(), gfmToMarkdown()] })
@@ -659,4 +691,22 @@ function findTaggedImport(haystack: string, tag: string): string {
         }
     }
     return includedLines.join('\n');
+}
+
+
+function mdHeadingToString(children: mdast.PhrasingContent[]): string {
+    let str = '';
+    for (const i of children) {
+        if (i.type === 'text' || i.type === 'inlineCode') {
+            str += i.value;
+        } else if (i.type !== 'break' &&
+        i.type !== 'footnoteReference'&&
+        i.type !== 'html' &&
+        i.type !== 'image' &&
+        i.type !== 'imageReference'
+        ) {
+            str += mdHeadingToString(i.children)
+        }
+    }
+    return str;
 }

@@ -63,6 +63,9 @@ async function parseMd(file: string): Promise<any> {
           rehype: { options: { handlers: {} }, plugins: {
             highlight: {
                 instance: rehypeShiki,
+            },
+            'rehype-title-id': {
+              instance: myRehypePlugin
             }
           } },
           toc: undefined
@@ -70,7 +73,7 @@ async function parseMd(file: string): Promise<any> {
       return parsed;
 }
 
-function convertXrefs(file: Root, xrefs: Map<string, string>, chapters: { title: string}[]) {
+function convertXrefs(file: Root, xrefs: Map<string, { url: string, title?: string }>, chapters: { title: string}[]) {
   visitParents(file, 'link', link => {
     if (link.url.startsWith('xref::')) {
       const name = link.url.slice(6);
@@ -78,14 +81,16 @@ function convertXrefs(file: Root, xrefs: Map<string, string>, chapters: { title:
         console.log('warning, ', name)
       }
       const xrefUrl = xrefs.get(name)
-      link.url = (xrefUrl || '/404') + '#' + name;
+      link.url = (xrefUrl?.url || '/404') + '#' + name;
 
       
-      if (link.children.length === 1 && link.children[0].type === 'text' && link.children[0].value.startsWith('::xref::name')) {
-        if (xrefUrl.startsWith('/man/')) {
-          link.children[0].value = xrefUrl.slice(5) + '#' + name;
-        } else if (xrefUrl.startsWith('/chapters/')) {
-          const chapterId = xrefUrl.slice(10);
+      if (xrefUrl && link.children.length === 1 && link.children[0].type === 'text' && link.children[0].value.startsWith('xref::name')) {
+        if (xrefUrl.title) {
+          link.children[0].value = xrefUrl.title;
+        } else if (xrefUrl.url.startsWith('/man/')) {
+          link.children[0].value = xrefUrl.url.slice(5) + '#' + name;
+        } else if (xrefUrl.url.startsWith('/chapters/')) {
+          const chapterId = xrefUrl.url.slice(10);
           const chapter = chapters[chapterId];
           link.children[0].value = chapter.title + '#' + name;
         }
@@ -94,7 +99,7 @@ function convertXrefs(file: Root, xrefs: Map<string, string>, chapters: { title:
   })
 }
   
-async function convertRefpages(xrefs: Map<string, string>, chapters: { title: string }[]) {
+async function convertRefpages(xrefs: Map<string, { url: string, title?: string }>, chapters: { title: string }[]) {
     const metadata: {
         id: string,
         parent: string[],
@@ -145,7 +150,7 @@ async function convertRefpages(xrefs: Map<string, string>, chapters: { title: st
     await writeFile('./dist/man/index.json', JSON.stringify(metadata));
 }
 
-async function chapters(xrefs: Map<string, string>, chapters: { title: string }[]) {
+async function chapters(xrefs: Map<string, { url: string, title?: string }>, chapters: { title: string }[]) {
     for (const filename of await readdir('./dist/chapters/')) {
         if (!filename.endsWith('.md')) {
             continue;
@@ -185,5 +190,31 @@ async function main() {
   await chapters(xrefs, c);
   await convertRefpages(xrefs, c);
 }
+
+export default function myRehypePlugin (tree, options) {
+  return processRehype
+}
+
+
+function processRehype(node) {
+  if (node.type === 'element' && /^h[1-6]$/.test(node.tagName)) {
+    const firstChildren = node.children[0];
+    if (firstChildren && firstChildren.type === 'text' && firstChildren.value.startsWith('#')) {
+      const components = firstChildren.value.split(' ');
+      const id = components[0].slice(1);
+      firstChildren.value = firstChildren.value.slice(id.length + 2);
+      node.properties = node.properties || {};
+      node.properties.id = id;
+    }
+    return
+  }
+
+  if (node.children) {
+    for (const i of node.children) {
+      processRehype(i)
+    }
+  }
+}
+
 
 main();
