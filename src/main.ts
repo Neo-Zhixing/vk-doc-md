@@ -412,6 +412,19 @@ function docbookRefpage(docbook: xast.Root): mdast.RootContent[] {
 }
 
 async function main() {
+    // read vkdoc.xml to find the list of all extensions
+    const xml = fromXml(await readFile('./Vulkan-Docs/xml/vk.xml', 'utf-8'));
+    const registry: xast.Element = xml.children.find(x => x.type === 'element' && x.name === 'registry') as xast.Element;
+    const extensionNode: xast.Element = registry.children.find(x => x.type === 'element' && x.name === 'extensions') as xast.Element;
+    const extensions = extensionNode
+        .children
+        .filter(x => x.type === 'element' &&
+            x.name === 'extension' &&
+            (x.attributes.supported || '').split(',').includes('vulkan'))
+        .map(x => [(x as xast.Element).attributes.name, true]);
+    const attributes = Object.fromEntries(extensions)
+
+
     await mkdir('./dist/chapters', { recursive: true });
     await mkdir('./dist/man', { recursive: true });
     let should_skip: boolean = false;
@@ -534,7 +547,8 @@ async function main() {
         })
     })
     const vkspecDocbook = processor.convert(await readFile('./Vulkan-Docs/vkspec.adoc'), {
-        backend: 'docbook'
+        backend: 'docbook',
+        attributes
     });
     const vkspecDocbookXast = fromXml(`<root>${vkspecDocbook}</root>`);
     const vkspecMdast = docbookRefpage(vkspecDocbookXast) ;
@@ -616,6 +630,7 @@ async function main() {
         const content = 'include::{config}/attribs.adoc[]\n' + refpage.content;
         const page = processor.convert(content, {
             backend: 'docbook',
+            attributes
         });
         if (should_skip) {
             console.log('skipping', refpage.name)

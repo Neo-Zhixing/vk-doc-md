@@ -39,7 +39,7 @@ fn main() {
 struct Converter {
     registry: Registry,
     types: HashMap<String, vk_parse::Type>,
-    commands: HashMap<String, vk_parse::CommandDefinition>,
+    commands: HashMap<String, vk_parse::Command>,
     enums: HashMap<String, vk_parse::Enums>,
     consts: HashMap<String, vk_parse::Enum>,
     parents: HashMap<String, String>, // mapping from item to [feature, extension]
@@ -181,11 +181,13 @@ impl Converter {
                 }
                 RegistryChild::Commands(commands) => {
                     for command in commands.children.iter() {
-                        let vk_parse::Command::Definition(command) = command else {
-                            continue;
+                        let name = match command {
+                            vk_parse::Command::Definition(command) => command.proto.name.clone(),
+                            vk_parse::Command::Alias { name, alias } => name.clone(),
+                            _ => unimplemented!()
                         };
                         this.commands
-                            .insert(command.proto.name.clone(), command.clone());
+                            .insert(name, command.clone());
                     }
                 }
                 RegistryChild::Types(ty) => {
@@ -395,9 +397,27 @@ pub type {name} = Option<
     }
     fn generate_handles(&self, name: &str) -> String {
         let ty = &self.types[name];
+        if let Some(alias) = &ty.alias {
+            let rs_name = name.strip_prefix("Vk").unwrap();
+            let rs_alias = alias.strip_prefix("Vk").unwrap();
+            return format!(
+                "::code-group
+```c [C]
+typedef {alias} {name};
+```
+```rs [Rust]
+
+```
+type {rs_name} = vk::{rs_alias};
+"
+            );
+        }
         let code = match &ty.spec {
             vk_parse::TypeSpec::Code(code) => code.code.as_str(),
-            _ => unimplemented!(),
+            _ =>  {
+                println!("{name}");
+                unimplemented!()
+            },
         };
         let rs_name = name.strip_prefix("Vk").unwrap();
         return format!(
@@ -426,7 +446,25 @@ pub struct {rs_name}(_);
         );
     }
     fn generate_enum(&self, name: &str) -> String {
+        // three cases here: enum def, enum alias, const value
         if !self.enums.contains_key(name) {
+            if !self.consts.contains_key(name) {
+                // enum alias
+                let ty = &self.types[name];
+                let alias = ty.alias.as_ref().unwrap();
+                let rs_name = name.strip_prefix("Vk").unwrap();
+                let rs_alias = alias.strip_prefix("Vk").unwrap();
+                return format!(
+                    "::code-group
+```c [C]
+#define {name} {alias}
+```
+```rs [Rust]
+const {rs_name}: _ = vk::{rs_alias};
+```
+::"
+                );
+            }
             let rs_name = &name[3..];
             let val = &self.consts[name];
             match &val.spec {
@@ -445,9 +483,29 @@ const {rs_name}: {rs_type} = {rs_value};
 ::"
                     );
                 }
-                _ => unimplemented!(),
+                vk_parse::EnumSpec::Alias { alias, extends } => {
+                    let rs_alias_name = &alias[3..];
+                    let target = &self.consts[alias];
+                    let vk_parse::EnumSpec::Value { value, extends } = &target.spec else {
+                        panic!()
+                    };
+                    let (rs_type, rs_value) = convert_c_enum_init_value_to_rust(value);
+                    return format!(
+                        "::code-group
+```c [C]
+#define {name} {alias}
+```
+```rs [Rust]
+const {rs_name}: {rs_type} = vk::{rs_alias_name};
+```
+::"
+                    );
+                },
+                _ => unimplemented!()
             }
         }
+
+        // enum definition
 
         let e = &self.enums[name];
         let rs_name = &name[2..];
@@ -544,7 +602,17 @@ impl {rs_name} {{
 
     fn fn_attributes(&self, name: &str) -> String {
         let mut attributes = String::new();
-        let command = &self.commands[name];
+        let mut command = &self.commands[name];
+        loop {
+            match command {
+                vk_parse::Command::Alias { name, alias } => command = &self.commands[alias],
+                vk_parse::Command::Definition(_) => break,
+                _ => todo!(),
+            }
+        }
+        let vk_parse::Command::Definition(command) = command else {
+            unreachable!()
+        };
         if let Some(cmdbufferlevel) = &command.cmdbufferlevel {
             attributes += &format!("cmd_buf_level: [{cmdbufferlevel}]\n");
         }
@@ -563,7 +631,18 @@ impl {rs_name} {{
         attributes
     }
     fn generate_fn_prototype(&self, name: &str) -> String {
-        let command = &self.commands[name];
+        let mut command = &self.commands[name];
+        loop {
+            match command {
+                vk_parse::Command::Alias { name, alias } => command = &self.commands[alias],
+                vk_parse::Command::Definition(_) => break,
+                _ => todo!(),
+            }
+        }
+        let vk_parse::Command::Definition(mut command) = command.clone() else {
+            unreachable!()
+        };
+        command.proto.name = name.to_string();
         let return_type = command
             .proto
             .type_name
@@ -619,6 +698,20 @@ pub fn {rs_fn_name}(
     }
     fn generate_flags(&self, name: &str) -> String {
         let ty = &self.types[name];
+        if let Some(alias) = &ty.alias {
+            let rs_name = name.strip_prefix("Vk").unwrap();
+            let rs_alias = alias.strip_prefix("Vk").unwrap();
+            return format!(
+                "::code-group
+```c [C]
+typedef {alias} {name};
+```
+```rs [Rust]
+pub type {rs_name} = vk::{rs_alias}; 
+```
+::"
+            )
+        }
         match &ty.spec {
             vk_parse::TypeSpec::Code(code) => {
                 let c_code = code.code.as_str();
@@ -667,15 +760,15 @@ pub struct {name}({ty});
     fn generate_api_struct(&self, name: &str) -> String {
         let ty = &self.types[name];
         if let Some(alias) = &ty.alias {
-            let rs_alias = convert_c_type_to_rust(alias);
-            let rs_name = convert_c_type_to_rust(name);
+            let rs_name = name.strip_prefix("Vk").unwrap();
+            let rs_alias = alias.strip_prefix("Vk").unwrap();
             return format!(
                 "::code-group
 ```c [C]
 typedef {alias} {name};
 ```
 ```rs [Rust]
-type {rs_name} = {rs_alias};
+type {rs_name} = vk::{rs_alias};
 ```
 ::"
             );
