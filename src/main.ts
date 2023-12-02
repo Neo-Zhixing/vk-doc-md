@@ -334,6 +334,17 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             const varlists = node.children.filter(a => a.type === 'element' && a.name === 'varlistentry');
             return varlists.flatMap(a => docbookConvertNode(a, level))
         }
+        if (node.name === 'literallayout') {
+            if (node.attributes.class === 'monospaced' && node.children.length === 1 && node.children[0].type === 'text') {
+
+                return [
+                    <mdast.Code> {
+                        type: 'code',
+                        value: node.children[0].value
+                    }
+                ]
+            }
+        }
         if (node.name === 'sidebar') {
             docbookRemovePaddingNewlines(node.children);
             const title = node.children.find(a => a.type === 'element' && a.name === 'title');
