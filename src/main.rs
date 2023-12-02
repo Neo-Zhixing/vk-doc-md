@@ -16,7 +16,6 @@ fn main() {
     for mdfile in std::fs::read_dir("./dist/man").unwrap() {
         let mdfile = mdfile.unwrap();
         if mdfile.path().extension().map(|a| a.to_str().unwrap()) != Some("md") {
-            println!("Skipped {:?}", mdfile.path());
             continue;
         }
         let mut file = std::fs::OpenOptions::new()
@@ -602,16 +601,9 @@ impl {rs_name} {{
 
     fn fn_attributes(&self, name: &str) -> String {
         let mut attributes = String::new();
-        let mut command = &self.commands[name];
-        loop {
-            match command {
-                vk_parse::Command::Alias { name, alias } => command = &self.commands[alias],
-                vk_parse::Command::Definition(_) => break,
-                _ => todo!(),
-            }
-        }
+        let command = &self.commands[name];
         let vk_parse::Command::Definition(command) = command else {
-            unreachable!()
+            return String::new();
         };
         if let Some(cmdbufferlevel) = &command.cmdbufferlevel {
             attributes += &format!("cmd_buf_level: [{cmdbufferlevel}]\n");

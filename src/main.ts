@@ -16,7 +16,6 @@ import Asciidoctor from '@asciidoctor/core'
 import docbookConverter from '@asciidoctor/docbook-converter'
 import { existsSync, readFileSync } from "fs";
 import { writeFile, mkdir } from 'fs/promises';
-import { text } from "stream/consumers";
 import { visitParents } from "unist-util-visit-parents";
 
 function docbookRemovePaddingNewlines(i: xast.RootContent[]) {
@@ -550,6 +549,7 @@ async function main() {
         backend: 'docbook',
         attributes
     });
+    //await writeFile('./dist/vkspec.xml', vkspecDocbook);
     const vkspecDocbookXast = fromXml(`<root>${vkspecDocbook}</root>`);
     const vkspecMdast = docbookRefpage(vkspecDocbookXast) ;
     const xrefs = new Map<string, { url: string, title?: string }>();
@@ -563,7 +563,7 @@ async function main() {
             if (node.type === 'heading' && node.depth === 1) {
                 if (currentName) {
                     visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
-                        const match = /:?:anchor\{id="(.+)"\}/.exec(node.value);
+                        const match = /:anchor\{id="(.+)"\}/.exec(node.value);
                         if (match) {
                             const name = match[1];
                             xrefs.set(name, { url: '/chapters/' + currentChunkIndex })
@@ -598,7 +598,7 @@ async function main() {
         // Get xrefs
         visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
             assert(node.type === 'text');
-            const match = /:?:anchor\{id="(.+)"\}/.exec(node.value);
+            const match = /:anchor\{id="(.+)"\}/.exec(node.value);
             if (match) {
                 const name = match[1];
                 xrefs.set(name, { url: '/chapters/' + currentChunkIndex })
@@ -632,6 +632,7 @@ async function main() {
             backend: 'docbook',
             attributes
         });
+        //await writeFile(`./dist/man/${refpage.name}.xml`, page);
         if (should_skip) {
             console.log('skipping', refpage.name)
             continue;
@@ -668,7 +669,7 @@ async function main() {
         // Get xrefs
         visitParents(mdast,'text', (node) => {
             assert(node.type === 'text');
-            const match = /^:?:anchor\{id="(.+)"\}/.exec(node.value);
+            const match = /:anchor\{id="(.+)"\}/.exec(node.value);
             if (match) {
                 const name = match[1];
                 xrefs.set(name, { url: '/man/' + refpage.name })

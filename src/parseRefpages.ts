@@ -98,7 +98,7 @@ function convertXrefs(file: Root, xrefs: Map<string, { url: string, title?: stri
     }
   })
 }
-  
+
 async function convertRefpages(xrefs: Map<string, { url: string, title?: string }>, chapters: { title: string }[]) {
     const metadata: {
         id: string,
@@ -186,9 +186,16 @@ async function chapters(xrefs: Map<string, { url: string, title?: string }>, cha
 async function main() {
   const c = JSON.parse(await readFile('./dist/chapters/index.json', 'utf-8'))
   let xrefs = JSON.parse(await readFile('./dist/xrefs.json', 'utf-8'))
-  xrefs = new Map(Object.entries(xrefs))
-  await chapters(xrefs, c);
-  await convertRefpages(xrefs, c);
+  let xrefsMap: Map<string, { url: string, title?: string }> = new Map(Object.entries(xrefs))
+
+  const allManPages = (await readdir('./dist/man')).filter(a => a.endsWith('.md')).map(a => a.slice(0, -3));
+  for (const item of allManPages) {
+    if (!xrefsMap.has(item)) {
+      xrefsMap.set(item, { url: '/man/' + item, title: item })
+    }
+  }
+  await chapters(xrefsMap, c);
+  await convertRefpages(xrefsMap, c);
 }
 
 export default function myRehypePlugin (tree, options) {
