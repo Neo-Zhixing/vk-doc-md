@@ -588,9 +588,13 @@ async function main() {
                     currentChunkIndex += 1;
                 }
                 currentChunk = [];
-                const textNode = node.children[0];
-                assert(textNode.type === 'text');
-                currentName = textNode.value;
+                assert(node.children[0].type === 'text');
+                if (node.children[0].value.startsWith('#')) {
+                    assert(node.children[1].type === 'text');
+                    currentName = node.children[1].value;
+                } else {
+                    currentName = node.children[0].value;
+                }
             }
             currentChunk.push(node);
         }
