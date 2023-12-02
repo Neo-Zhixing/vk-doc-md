@@ -365,7 +365,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                         value: '\n::\n'
                     },
                 ]
-            } else if (titleText === '{externsynctitle}') {
+            } else if (titleText === 'Host Synchronization') {
                 const list = node.children.find(a => a.type === 'element' && a.name === 'itemizedlist');
                 if (!list || list.type !== 'element') {
                     return [];
