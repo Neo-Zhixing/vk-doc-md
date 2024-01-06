@@ -273,7 +273,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 ...node.children.flatMap(j => docbookConvertNode(j, level)),
                 <mdast.Text> {
                     type: 'text',
-                    value: '\n::\n'
+                    value: '\n\n::\n'
                 },
             ]
         }
