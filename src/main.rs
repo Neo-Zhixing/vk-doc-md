@@ -773,23 +773,39 @@ type {rs_name} = vk::{rs_alias};
             vk_parse::TypeSpec::Members(members) => {
                 let c_members = members
                     .iter()
-                    .map(|member| match member {
-                        vk_parse::TypeMember::Comment(comment) => format!("// {comment}"),
-                        vk_parse::TypeMember::Definition(def) => Regex::new(r" +")
-                            .unwrap()
-                            .replace_all(&def.code, " ")
-                            .to_string(),
-                        _ => todo!(),
+                    .filter_map(|member| {
+                        let result = match member {
+                            vk_parse::TypeMember::Comment(comment) => format!("// {comment}"),
+                            vk_parse::TypeMember::Definition(def) => {
+                                if let Some(api) = &def.api {
+                                    if api != "vulkan" {
+                                        return None;
+                                    }
+                                }
+                                Regex::new(r" +")
+                                .unwrap()
+                                .replace_all(&def.code, " ")
+                                .to_string()
+                            },
+                            _ => todo!(),
+                        };
+                        Some(result)
                     })
                     .fold(String::new(), |a, b| a + "    " + &b + ";\n")
                     .trim_end()
                     .to_string();
                 let rs_members = members
                     .iter()
-                    .map(|member| match member {
-                        vk_parse::TypeMember::Comment(comment) => format!("/// {comment}"),
+                    .filter_map(|member| match member {
+                        vk_parse::TypeMember::Comment(comment) => Some(format!("/// {comment}")),
                         vk_parse::TypeMember::Definition(def) => {
                             use generator::FieldExt;
+
+                            if let Some(api) = &def.api {
+                                if api != "vulkan" {
+                                    return None;
+                                }
+                            }
 
                             let element: vkxml::StructElement = member.clone().into();
                             let field = match element {
@@ -832,14 +848,14 @@ type {rs_name} = vk::{rs_alias};
                                 .next()
                                 .unwrap_or("");
                             if comment.is_empty() {
-                                format!("{name}: {ty}")
+                                Some(format!("{name}: {ty},"))
                             } else {
-                                format!("{name}: {ty} // {comment}")
+                                Some(format!("{name}: {ty}, // {comment}"))
                             }
                         }
                         _ => todo!(),
                     })
-                    .fold(String::new(), |a, b| a + "    " + &b + ",\n")
+                    .fold(String::new(), |a, b| a + "    " + &b + "\n")
                     .trim_end()
                     .to_string();
                 let rs_name = name.strip_prefix("Vk").unwrap();
