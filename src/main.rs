@@ -651,6 +651,7 @@ impl {rs_name} {{
         let params = command
             .params
             .iter()
+            .filter(|a| a.api.as_ref().map(String::as_str) != Some("vulkansc"))
             .map(|a| &a.definition.code)
             .fold(String::new(), |a, b| a + "    " + &b + ",\n");
 
