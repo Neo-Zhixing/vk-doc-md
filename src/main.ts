@@ -110,7 +110,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             return [
                 <mdast.Text> {
                     type: 'text',
-                    value: `$$${latex}$$`
+                    value: `$$\n${latex}\n$$`
                 }
             ]
         }

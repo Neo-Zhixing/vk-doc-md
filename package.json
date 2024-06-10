@@ -9,7 +9,7 @@
 		"mdast-util-frontmatter": "^2.0.1",
 		"mdast-util-gfm": "^3.0.0",
 		"mdast-util-to-markdown": "^2.1.0",
-		"rehype-mathjax": "^6.0.0",
+		"rehype-katex": "^7.0.0",
 		"remark-math": "^6.0.0",
 		"vue": "^3.4.27",
 		"xast-util-from-xml": "^4.0.0"

@@ -15,7 +15,7 @@ import {visitParents} from 'unist-util-visit-parents'
 import { Root } from "mdast";
 import { toMarkdown } from "mdast-util-to-markdown";
 import remarkMath from "remark-math";
-import rehypeMathjax from "rehype-mathjax";
+import rehypeKatex from "rehype-katex";
 export const PROSE_TAGS = [
     'p',
     'a',
@@ -70,8 +70,8 @@ async function parseMd(file: string): Promise<any> {
             'rehype-title-id': {
               instance: myRehypePlugin
             },
-            'rehype-mathjax': {
-              instance: rehypeMathjax
+            'rehype-katex': {
+              instance: rehypeKatex
             }
           } },
           toc: undefined
