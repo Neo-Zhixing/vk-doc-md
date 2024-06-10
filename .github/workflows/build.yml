@@ -51,10 +51,6 @@ jobs:
         run: cargo run --release
       - name: Generate content json 
         run: pnpm run parse-refpages
-
-      - name: Reindex Meilisearch
-        run: pnpm run populate-search
-
       - name: Remove extra files
         run: rm ./dist/**/*.md
       - name: Copy images

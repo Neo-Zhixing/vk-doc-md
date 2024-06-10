@@ -779,6 +779,7 @@ function mdHeadingToString(children: mdast.PhrasingContent[]): string {
         i.type !== 'footnoteReference'&&
         i.type !== 'html' &&
         i.type !== 'image' &&
+        i.type !== 'inlineMath' &&
         i.type !== 'imageReference'
         ) {
             str += mdHeadingToString(i.children)

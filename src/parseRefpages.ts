@@ -8,12 +8,14 @@ import { parse } from "yaml";
 import assert from "assert";
 import { parseMarkdown } from '@nuxtjs/mdc/runtime';
 import type { MDCParseOptions } from '@nuxtjs/mdc/runtime/types/parser';
-import type { Theme } from '@nuxtjs/mdc/runtime/shiki/types';
-import rehypeShiki from '@nuxtjs/mdc/runtime/shiki/index';
-import { useShikiHighlighter } from '@nuxtjs/mdc/runtime/shiki/highlighter'
+import type { MdcThemeOptions  } from '@nuxtjs/mdc/runtime/highlighter/types';
+import rehypeHighlight from '@nuxtjs/mdc/runtime/highlighter/rehype';
+import { createShikiHighlighter } from '@nuxtjs/mdc/runtime/highlighter/shiki'
 import {visitParents} from 'unist-util-visit-parents'
 import { Root } from "mdast";
 import { toMarkdown } from "mdast-util-to-markdown";
+import remarkMath from "remark-math";
+import rehypeMathjax from "rehype-mathjax";
 export const PROSE_TAGS = [
     'p',
     'a',
@@ -54,18 +56,22 @@ async function parseMd(file: string): Promise<any> {
     const parsed = await parseMarkdown(file, <MDCParseOptions> {
         highlight: {
             ...shikiTheme,
-            highlighter: async (code: string, lang: string, theme: Theme, highlights) => {
-                const shikiHighlighter = useShikiHighlighter(shikiTheme)
-                return await shikiHighlighter.getHighlightedAST(code as string, lang as any, theme as Theme, { highlights })
-              }
+            highlighter: createShikiHighlighter()
           },
-          remark: { plugins: {} },
+          remark: { plugins: {
+            'remark-math': {
+              instance: remarkMath
+            }
+          } },
           rehype: { options: { handlers: {} }, plugins: {
             highlight: {
-                instance: rehypeShiki,
+                instance: rehypeHighlight,
             },
             'rehype-title-id': {
               instance: myRehypePlugin
+            },
+            'rehype-mathjax': {
+              instance: rehypeMathjax
             }
           } },
           toc: undefined
