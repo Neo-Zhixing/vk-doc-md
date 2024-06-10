@@ -77,6 +77,22 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         }]
     }
     if (node.type === 'element') {
+        if (node.name === 'figure') {
+            const titleNode = node.children.find(x => x.type === 'element' && x.name === 'title') as xast.Element;
+            const titleNodeText = (titleNode!.children[0] as xast.Text).value;
+            const mediaObject = node.children.find(x => x.type === 'element' && x.name === 'mediaobject') as xast.Element;
+            const mediaImageObject = mediaObject.children.find(x => x.type === 'element' && x.name === 'imageobject') as xast.Element;
+            const imageData = mediaImageObject.children.find(x => x.type === 'element' && x.name === 'imagedata') as xast.Element;
+            const mediaTextObject = mediaObject.children.find(x => x.type === 'element' && x.name === 'textobject') as xast.Element;
+            const phraseObject = mediaTextObject.children.find(x => x.type === 'element' && x.name === 'phrase') as xast.Element;
+            const alt = phraseObject.children[0] as xast.Text;
+            return [<mdast.Image> {
+                type: 'image',
+                title: titleNodeText,
+                url: imageData.attributes.fileref.replace('{images}', 'https://data.vkdoc.net/images'),
+                alt: alt.value,
+            }]
+        }
         if (node.name === 'simpara' || node.name === 'para' || node.name === 'formalpara') {
             if (node.attributes['xml:id']) {
                 if (node.children.length === 0) {
