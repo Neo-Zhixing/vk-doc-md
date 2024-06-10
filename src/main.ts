@@ -553,12 +553,20 @@ async function main() {
         }
         this.includeProcessor(function () {
             this.handles((target: string) => {
-              return target.startsWith('{chapters}') || target.startsWith('{generated}/validity/') || target.startsWith('{config}')
+              const handled =  target.startsWith('{chapters}') || target.startsWith('{generated}/validity/') ||
+                target.startsWith('{config}') || target.startsWith('{chapters}/commonvalidity') || target.startsWith('{generated}/sync') ||
+                target.startsWith('{generated}/hostsynctable') || target.startsWith('{generated}/formats') || target.startsWith('{appendices}');
+              if (!handled && !target.startsWith('{generated}/api/')) {
+                console.log(target, 'include not handled')
+              }
+
+              return handled;
             })
             this.process((doc: any, reader: any, target: string, attrs: any) => {
                 const path = target.replace('{chapters}', './Vulkan-Docs/chapters')
                 .replace('{generated}', './Vulkan-Docs/gen')
-                .replace('{config}', './Vulkan-Docs/config');
+                .replace('{config}', './Vulkan-Docs/config')
+                .replace('{appendices}', './Vulkan-Docs/appendices');
                 if (!existsSync(path)) {
                     console.log("referenced file not found: ", path)
                     should_skip = true;
