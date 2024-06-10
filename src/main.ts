@@ -93,6 +93,27 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 alt: alt.value,
             }]
         }
+        if (node.name === 'inlineequation') {
+            // const alt = node.children.find(x => x.type === 'element' && x.name === 'alt') as xast.Element;
+            const mathphrase = node.children.find(x => x.type === 'element' && x.name === 'mathphrase') as xast.Element;
+            const latex = (mathphrase.children[0] as xast.Cdata).value;
+            return [
+                <mdast.Text> {
+                    type: 'text',
+                    value: `$${latex}$`
+                }
+            ]
+        }
+        if (node.name === 'informalequation') {
+            const mathphrase = node.children.find(x => x.type === 'element' && x.name === 'mathphrase') as xast.Element;
+            const latex = (mathphrase.children[0] as xast.Cdata).value;
+            return [
+                <mdast.Text> {
+                    type: 'text',
+                    value: `$$${latex}$$`
+                }
+            ]
+        }
         if (node.name === 'simpara' || node.name === 'para' || node.name === 'formalpara') {
             if (node.attributes['xml:id']) {
                 if (node.children.length === 0) {
@@ -366,8 +387,8 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             const title = node.children.find(a => a.type === 'element' && a.name === 'title');
             let titleText = ((title as xast.Element).children[0] as xast.Text).value;
             if (titleText === 'Valid Usage' || titleText === 'Valid Usage (Implicit)') {
-                const list = node.children.find(a => a.type === 'element' && a.name === 'itemizedlist');
-                if (!list || list.type !== 'element') {
+                const list = node.children.filter(a => a.type === 'element' && a.name === 'itemizedlist');
+                if (!list || list.length === 0) {
                     return [];
                 }
                 return [
@@ -375,7 +396,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                         type: 'text',
                         value: `\n::validity-group{name="${titleText}"}\n`
                     },
-                    ...list.children.flatMap(j => docbookRefblockValidityConvert(j, level)),
+                    ...list.flatMap(l => (l as xast.Element).children.flatMap(j => docbookRefblockValidityConvert(j, level))),
                     <mdast.Text> {
                         type: 'text',
                         value: '\n::\n'
