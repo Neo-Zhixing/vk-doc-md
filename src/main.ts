@@ -173,7 +173,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 return [
                     <mdast.Html>{
                         type: 'html',
-                        value: `<sub>${value}</sub>`
+                        value: `<sup>${value}</sup>`
                     },
                 ]
             }
@@ -229,8 +229,13 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             }
             return node.children.flatMap(i => docbookConvertNode(i, level + 1))
         }
-        if (node.name === 'table')  {
-            return [] // TODO
+        if (node.name === 'html')  {
+            const text = node.children[0] as xast.Text;
+            const html = Buffer.from(text.value, 'base64').toString();
+            return [<mdast.Html>  {
+                type: 'html',
+                value: html
+            }]
         }
         if (node.name === 'emphasis') {
             return [<mdast.Emphasis>{
@@ -468,7 +473,25 @@ async function main() {
 
     const processor = Asciidoctor();
     docbookConverter.register();
+    const html5Converter = processor.Html5Converter.create();
     processor.Extensions.register(function() {
+        this.treeProcessor(function() {
+            this.process(document => {
+                const recursiveReplace = block => {
+                    let children = block.getBlocks();
+                    for (const childIndex in children ) {
+                        const child = children[childIndex]
+                        if (child.node_name === 'table') {
+                            const html = html5Converter.convert(child);
+                            children[childIndex] = this.createBlock(document, 'pass', `<html>${Buffer.from(html).toString('base64')}</html>`)
+                        } else if (child.getBlocks) {
+                            recursiveReplace(child)
+                        }
+                    }
+                }
+                recursiveReplace(document)
+            })
+        })
         this.treeProcessor(function () {
             this.process((document) => {
                 document.findBy(block => {
