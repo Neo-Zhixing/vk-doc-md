@@ -163,6 +163,53 @@ async function convertRefpages(xrefs: Map<string, { url: string, title: string }
     await writeFile('./dist/man/index.json', JSON.stringify(metadata));
 }
 
+async function convertExtensions(xrefs: Map<string, { url: string, title: string }>) {
+  const metadata: {
+      id: string,
+      parent: string[],
+      type: string,
+  }[] = [];
+  for (const filename of await readdir('./dist/extensions/')) {
+      if (!filename.endsWith('.md')) {
+          continue;
+      }
+      const path = './dist/extensions/' + filename;
+      const id = filename.slice(0, -3);
+      let file = await readFile(path, 'utf-8');
+      const tree = fromMarkdown(file, {
+          extensions: [gfm(), frontmatter(['yaml', 'toml'])],
+          mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(['yaml', 'toml'])]
+        })
+      if (!id.includes('proposal')) {
+        const yamlNode = tree.children[0];
+        assert(yamlNode.type === 'yaml');
+        const yaml = parse(yamlNode.value);
+        assert(yaml.extension === id);
+        metadata.push(yaml)
+      }
+
+      convertXrefs(tree, xrefs);
+      file = toMarkdown(tree, {
+        extensions: [gfmToMarkdown(), frontmatterToMarkdown(['yaml', 'toml'])]
+      })
+
+      const parsed = await parseMd(file);
+        const results = {
+          ...parsed.data,
+          excerpt: parsed.excerpt,
+          body: {
+            ...parsed.body,
+            toc: parsed.toc
+          },
+          _type: 'markdown',
+          _id: id
+        }
+      await writeFile(`./dist/extensions/${id}.json`, JSON.stringify(results));
+      await writeFile(`./dist/extensions/${id}.md`, file);
+  }
+  await writeFile('./dist/extensions/index.json', JSON.stringify(metadata));
+}
+
 async function chapters(xrefs: Map<string, { url: string, title: string }>, chapters: { title: string }[]) {
     for (const filename of await readdir('./dist/chapters/')) {
         if (!filename.endsWith('.md')) {
@@ -207,6 +254,7 @@ async function main() {
       xrefsMap.set(item, { url: '/man/' + item, title: item })
     }
   }
+  await convertExtensions(xrefsMap);
   await chapters(xrefsMap, c);
   await convertRefpages(xrefsMap);
 }

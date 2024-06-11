@@ -28,7 +28,7 @@ jobs:
 
 
       - name: Build generated pages
-        run: cd Vulkan-Docs && ./makeSpec -spec all -version 1.3 validinc
+        run: cd Vulkan-Docs && ./makeSpec -spec all -version 1.3 validinc interfaceinc
 
 
       - uses: pnpm/action-setup@v2

@@ -13,6 +13,35 @@ fn main() {
     assert!(_errors.is_empty());
     let converter = Converter::new(registry);
 
+    for mdfile in std::fs::read_dir("./dist/extensions").unwrap() {
+        let mdfile = mdfile.unwrap();
+        let path = mdfile.path();
+        if path.extension().map(|a| a.to_str().unwrap()) != Some("md") {
+            continue;
+        }
+        if path.file_name().unwrap().to_str().unwrap().contains("proposal")  {
+            continue;
+        }
+        let ext_name = path.file_name().unwrap().to_str().unwrap().strip_suffix(".md").unwrap();
+        let Some(meta) = converter.get_extension_meta(ext_name) else {
+            continue;
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(mdfile.path())
+            .unwrap();
+        let mut mdcontent = String::new();
+        file.read_to_string(&mut mdcontent).unwrap();
+
+        let changed = converter.convert_file(&mut mdcontent, meta + "\n");
+        if changed {
+            file.seek(std::io::SeekFrom::Start(0)).unwrap();
+            file.write_all(mdcontent.as_bytes()).unwrap();
+            file.set_len(mdcontent.as_bytes().len() as u64).unwrap();
+        }
+    }
+
     for mdfile in std::fs::read_dir("./dist/man").unwrap() {
         let mdfile = mdfile.unwrap();
         if mdfile.path().extension().map(|a| a.to_str().unwrap()) != Some("md") {
@@ -26,7 +55,7 @@ fn main() {
         let mut mdcontent = String::new();
         file.read_to_string(&mut mdcontent).unwrap();
 
-        let changed = converter.convert_file(&mut mdcontent);
+        let changed = converter.convert_file(&mut mdcontent, String::new());
         if changed {
             file.seek(std::io::SeekFrom::Start(0)).unwrap();
             file.write_all(mdcontent.as_bytes()).unwrap();
@@ -41,6 +70,7 @@ struct Converter {
     commands: HashMap<String, vk_parse::Command>,
     enums: HashMap<String, vk_parse::Enums>,
     consts: HashMap<String, vk_parse::Enum>,
+    extensions: HashMap<String, vk_parse::Extension>,
     parents: HashMap<String, String>, // mapping from item to [feature, extension]
 }
 
@@ -64,6 +94,7 @@ impl Converter {
             enums: Default::default(),
             consts: Default::default(),
             parents: Default::default(),
+            extensions: Default::default(),
         };
         for child in this.registry.0.iter() {
             use vk_parse::RegistryChild;
@@ -115,6 +146,7 @@ impl Converter {
                 }
                 RegistryChild::Extensions(s) => {
                     for extension in s.children.iter() {
+                        this.extensions.insert(extension.name.clone(), extension.clone());
                         for c in extension.children.iter() {
                             match c {
                                 vk_parse::ExtensionChild::Require { items, .. } => {
@@ -225,24 +257,61 @@ impl Converter {
         }
         this
     }
-    fn convert_file(&self, file: &mut String) -> bool {
+
+    fn get_extension_meta(&self, ext: &str) -> Option<String> {
+        let ext = self.extensions.get(ext).unwrap();
+        if ext.supported.as_ref().map(String::as_str) == Some("vulkansc") {
+            return None;
+        }
+        let mut meta = String::new();
+        if let Some(number) = &ext.number {
+            meta.push_str(&format!("number: {}\n", number));
+        }
+        if let Some(ext_type) = &ext.ext_type {
+            meta.push_str(&format!("type: {}\n", ext_type));
+        }
+        if let Some(author) = &ext.author {
+            meta.push_str(&format!("author: {}\n", author));
+        }
+        if let Some(deprecatedby) = &ext.deprecatedby {
+            meta.push_str(&format!("deprecatedby: {}\n", deprecatedby));
+        }
+        if let Some(promotedto) = &ext.promotedto {
+            meta.push_str(&format!("promotedto: {}\n", promotedto));
+        }
+        if let Some(obsoletedby) = &ext.obsoletedby {
+            meta.push_str(&format!("obsoletedby: {}\n", obsoletedby));
+        }
+        meta.push_str(&format!("provisional: {:?}\n", ext.provisional));
+        if let Some(depends) = &ext.depends {
+            meta.push_str(&format!("depends: {}\n", depends));
+        }
+        if let Some(platform) = &ext.platform {
+            meta.push_str(&format!("platform: {}\n", platform));
+        }
+        if let Some(ratified) = &ext.ratified {
+            meta.push_str(&format!("ratified: {}\n", ratified));
+        }
+        if let Some(specialuse) = &ext.specialuse {
+            meta.push_str(&format!("specialuse: {}\n", specialuse));
+        }
+        Some(meta)
+    }
+
+    fn convert_file(&self, file: &mut String, mut additional_attributes: String) -> bool {
         let name = Regex::new(r"\ntitle: (.+)\n")
             .unwrap()
             .captures(file);
-        if name.is_none() {
-            println!("Missing match: {}", file)
-        }
-        let name = name
-            .unwrap()
-            .get(1)
-            .unwrap()
-            .as_str();
-
-        let mut additional_attributes = String::new();
-        if self.parents.contains_key(name) {
-            additional_attributes += "parent: ";
-            additional_attributes += &self.parents[name];
-            additional_attributes += "\n";
+        if let Some(name) = name {
+            let name = name
+                .get(1)
+                .unwrap()
+                .as_str();
+            if self.parents.contains_key(name) {
+                additional_attributes += "parent: ";
+                additional_attributes += &self.parents[name];
+                additional_attributes += "\n";
+            }
         }
 
         let regex = Regex::new(r"\[\{generated\}(.*)\]\(\{generated\}(.*)\)").unwrap();
@@ -305,13 +374,18 @@ impl Converter {
                 continue;
             };
         }
-        let changed = !replacements.is_empty();
+        let changed = !replacements.is_empty() || !additional_attributes.is_empty();
         for (key, replacement) in replacements.into_iter() {
             *file = file.replace(&key, &replacement);
         }
         if !additional_attributes.is_empty() {
-            *file =
-                "---\n".to_string() + &additional_attributes + file.strip_prefix("---\n").unwrap();
+            if file.starts_with("---\n") {
+                *file =
+                    "---\n".to_string() + &additional_attributes + file.strip_prefix("---\n").unwrap();
+            } else {
+                *file =
+                    "---\n".to_string() + &additional_attributes + "---" + file;
+            }
         }
         changed
     }

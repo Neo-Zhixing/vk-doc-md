@@ -2,7 +2,7 @@ import { fromXml } from "xast-util-from-xml";
 import {toMarkdown} from 'mdast-util-to-markdown';
 import {gfmToMarkdown} from 'mdast-util-gfm';
 import * as xast from 'xast';
-import { readFile } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 import assert from 'node:assert/strict';
 import * as mdast from 'mdast';
 import { stringify as yamlStringify } from 'yaml'
@@ -468,6 +468,7 @@ async function main() {
 
     await mkdir('./dist/chapters', { recursive: true });
     await mkdir('./dist/man', { recursive: true });
+    await mkdir('./dist/extensions', { recursive: true });
     let should_skip: boolean = false;
 
 
@@ -570,7 +571,11 @@ async function main() {
                 // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
                 this.match(new RegExp(macro + ':(\\w+)'))
                 this.process((parent: any, target: any) => {
-                    return this.createInline(parent, 'anchor', target, { type: 'link', target: '/man/' + target })
+                    if (target.startsWith('VK_')) {
+                        return this.createInline(parent, 'anchor', target, { type: 'link', target: '/extensions/' + target })
+                    } else {
+                        return this.createInline(parent, 'anchor', target, { type: 'link', target: '/man/' + target })
+                    }
                 })
             })
         }
@@ -588,7 +593,8 @@ async function main() {
             this.handles((target: string) => {
               const handled =  target.startsWith('{chapters}') || target.startsWith('{generated}/validity/') ||
                 target.startsWith('{config}') || target.startsWith('{chapters}/commonvalidity') || target.startsWith('{generated}/sync') ||
-                target.startsWith('{generated}/hostsynctable') || target.startsWith('{generated}/formats') || target.startsWith('{appendices}');
+                target.startsWith('{generated}/hostsynctable') || target.startsWith('{generated}/formats') || target.startsWith('{appendices}') ||
+                target.startsWith('{generated}/interfaces/VK');
               if (!handled && !target.startsWith('{generated}/api/')) {
                 console.log(target, 'include not handled')
               }
@@ -613,6 +619,87 @@ async function main() {
             })
         })
     })
+
+    // extensions
+    for (const filename of await readdir('./Vulkan-Docs/appendices')) {
+        if (!filename.startsWith('VK_') ||  !filename.endsWith('.adoc')) {
+            continue;
+        }
+        const extName = filename.substring(0, filename.length - 5)
+
+        const extFileContent = await readFile('./Vulkan-Docs/appendices/' + filename, 'utf-8');
+        const content = 'include::{config}/attribs.adoc[]\n' + extFileContent;
+        const extensionDocbook = processor.convert(content, {
+            backend: 'docbook',
+            attributes: {
+                'isrefpage': true,
+                ...attributes
+            }
+        });
+
+                
+        let contentXast;
+        try {
+        contentXast = fromXml(`<root>${extensionDocbook}</root>`);
+        } catch {
+            console.error('parsing', extName, 'errored')
+            continue;
+        }
+
+        
+        // Check proposal doc
+        let hasProposal = false;
+        if (existsSync(`./Vulkan-Docs/proposals/` + filename)) {
+            console.log('proposal', filename)
+            hasProposal = true
+            let extFileProposal = await readFile(`./Vulkan-Docs/proposals/` + filename, 'utf-8');
+            extFileProposal = extFileProposal.replaceAll(/asciimath:\[(.+)\]/g, "+$1+") // HACK
+            const content = 'include::{config}/attribs.adoc[]\n' + extFileProposal;
+            const proposalDocbook = processor.convert(content, {
+                backend: 'docbook',
+                attributes
+            });
+            let contentXast;
+            try {
+            contentXast = fromXml(`<root>${proposalDocbook}</root>`);
+            } catch {
+                console.error('parsing', extName, 'errored')
+                continue;
+            }
+            const mdast: mdast.Root = {
+                type: 'root',
+                children: docbookRefpage(contentXast) 
+            }
+            const md = toMarkdown(mdast, { extensions: [gfmToMarkdown()] })
+            await writeFile(`./dist/extensions/${extName}.proposal.md`, md);
+        }
+
+
+        const frontmatter: mdast.RootContent = {
+            type: 'yaml',
+            value: yamlStringify({
+                extension: extName,
+                proposal: hasProposal
+            })
+        }
+        const mdast: mdast.Root = {
+            type: 'root',
+            children: [
+                frontmatter,
+                <mdast.Text>{
+                    type: 'text',
+                    value: '\n\n',
+                },
+                ...docbookRefpage(contentXast) 
+            ]
+        }
+        
+        const md = toMarkdown(mdast, { extensions: [frontmatterToMarkdown(), gfmToMarkdown()] })
+        await writeFile(`./dist/extensions/${extName}.md`, md);
+    }
+
+
+
     const vkspecDocbook = processor.convert(await readFile('./Vulkan-Docs/vkspec.adoc'), {
         backend: 'docbook',
         attributes
@@ -693,7 +780,10 @@ async function main() {
         const content = 'include::{config}/attribs.adoc[]\n' + refpage.content;
         const page = processor.convert(content, {
             backend: 'docbook',
-            attributes
+            attributes: {
+                'isrefpage': true,
+                ...attributes
+            }
         });
         //await writeFile(`./dist/man/${refpage.name}.xml`, page);
         if (should_skip) {
