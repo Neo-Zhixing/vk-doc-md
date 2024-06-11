@@ -35,6 +35,9 @@ dependencies:
   remark-math:
     specifier: ^6.0.0
     version: 6.0.0
+  shiki:
+    specifier: ^1.6.3
+    version: 1.6.3
   vue:
     specifier: ^3.4.27
     version: 3.4.27(typescript@5.2.2)
@@ -528,7 +531,6 @@ packages:
 
   /@shikijs/core@1.6.3:
     resolution: {integrity: sha512-QnJKHFUW95GnlJLJGP6QLx4M69HM0KlXk+R2Y8lr/x4nAx1Yb/lsuxq4XwybuUjTxbJk+BT0g/kvn0bcsjGGHg==}
-    dev: true
 
   /@shikijs/transformers@1.6.3:
     resolution: {integrity: sha512-ptBuP/IIeqCzK3zZO/knFICZWs58uZWzbv7ND+bKOewe5NcCjZfSiMyzFwOyl23ewPJ1APjRBwLi6Asrodmmxw==}
@@ -2916,7 +2918,6 @@ packages:
     resolution: {integrity: sha512-lE1/YGlzFY0hQSyEfsZj18xGrTWxyhFQkaiILALqTBZPbJeYFWpbUhlmTGPOupYB/qC+H6sV4UznJzcEh3WMHQ==}
     dependencies:
       '@shikijs/core': 1.6.3
-    dev: true
 
   /signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}

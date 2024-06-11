@@ -44,19 +44,31 @@ export const PROSE_TAGS = [
   ]
 
 
+import MaterialThemePalenight from 'shiki/themes/material-theme-palenight.mjs';
+import MaterialThemeLighter from 'shiki/themes/material-theme-lighter.mjs';
+import MaterialTheme from 'shiki/themes/material-theme.mjs';
+
+import CLang from 'shiki/langs/c.mjs'
+import RustLang from 'shiki/langs/rust.mjs'
 async function parseMd(file: string): Promise<any> {
-    const shikiTheme = {
-        theme: {
-            light: 'material-theme-lighter',
-            default: 'material-theme',
-            dark: 'material-theme-palenight'
-          },
-          preload: [ 'rust', 'c' ],
-    }
     const parsed = await parseMarkdown(file, <MDCParseOptions> {
         highlight: {
-            ...shikiTheme,
-            highlighter: createShikiHighlighter()
+            theme: {
+              light: 'material-theme-lighter',
+              default: 'material-theme',
+              dark: 'material-theme-palenight'
+            },
+            highlighter: createShikiHighlighter({
+              bundledThemes: {
+                'material-theme-palenight': MaterialThemePalenight,
+                'material-theme-lighter': MaterialThemeLighter,
+                'material-theme': MaterialTheme,
+              },
+              bundledLangs: {
+                rust: RustLang,
+                c: CLang,
+              },
+            })
           },
           remark: { plugins: {
             'remark-math': {
@@ -66,6 +78,9 @@ async function parseMd(file: string): Promise<any> {
           rehype: { options: { handlers: {} }, plugins: {
             highlight: {
                 instance: rehypeHighlight,
+                options: {
+                  
+                }
             },
             'rehype-title-id': {
               instance: myRehypePlugin
