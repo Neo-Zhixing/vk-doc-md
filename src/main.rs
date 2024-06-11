@@ -369,6 +369,8 @@ impl Converter {
                     .unwrap();
                 let generated_code = self.generate_fn_ptr(&n);
                 replacements.insert(capture.get(0).unwrap().as_str().to_string(), generated_code);
+            } else if path.starts_with("/meta/{refprefix}"){
+                replacements.insert(capture.get(0).unwrap().as_str().to_string(), String::new());
             } else {
                 println!("Unknown path: {:?}", path);
                 continue;
@@ -379,13 +381,8 @@ impl Converter {
             *file = file.replace(&key, &replacement);
         }
         if !additional_attributes.is_empty() {
-            if file.starts_with("---\n") {
-                *file =
-                    "---\n".to_string() + &additional_attributes + file.strip_prefix("---\n").unwrap();
-            } else {
-                *file =
-                    "---\n".to_string() + &additional_attributes + "---" + file;
-            }
+            *file =
+                "---\n".to_string() + &additional_attributes + file.strip_prefix("---\n").unwrap();
         }
         changed
     }

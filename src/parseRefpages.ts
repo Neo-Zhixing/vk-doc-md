@@ -180,7 +180,9 @@ async function convertExtensions(xrefs: Map<string, { url: string, title: string
           extensions: [gfm(), frontmatter(['yaml', 'toml'])],
           mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(['yaml', 'toml'])]
         })
+      let title = id;
       if (!id.includes('proposal')) {
+        title = id.replace('.proposal', '')
         const yamlNode = tree.children[0];
         assert(yamlNode.type === 'yaml');
         const yaml = parse(yamlNode.value);
@@ -202,6 +204,7 @@ async function convertExtensions(xrefs: Map<string, { url: string, title: string
             toc: parsed.toc
           },
           _type: 'markdown',
+          title,
           _id: id
         }
       await writeFile(`./dist/extensions/${id}.json`, JSON.stringify(results));
