@@ -445,11 +445,11 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
     return []
 }
 
-function docbookRefpage(docbook: xast.Root): mdast.RootContent[] {
+function docbookRefpage(docbook: xast.Root, initialLevel: number = -2): mdast.RootContent[] {
     assert(docbook.type === 'root');
     const rootElement = docbook.children[0];
     assert(rootElement.type === 'element' && rootElement.name === 'root');
-    return rootElement.children.flatMap(children => docbookConvertNode(children, -2));
+    return rootElement.children.flatMap(children => docbookConvertNode(children, initialLevel));
 }
 
 async function main() {
@@ -628,7 +628,7 @@ async function main() {
         const extName = filename.substring(0, filename.length - 5)
 
         const extFileContent = await readFile('./Vulkan-Docs/appendices/' + filename, 'utf-8');
-        const content = 'include::{config}/attribs.adoc[]\n' + extFileContent;
+        const content = 'include::{config}/attribs.adoc[]\n' + `== ${extName}\n\n` + extFileContent;
         const extensionDocbook = processor.convert(content, {
             backend: 'docbook',
             attributes: {
@@ -668,7 +668,7 @@ async function main() {
             }
             const mdast: mdast.Root = {
                 type: 'root',
-                children: docbookRefpage(contentXast) 
+                children: docbookRefpage(contentXast, 0) 
             }
             const md = toMarkdown(mdast, { extensions: [gfmToMarkdown()] })
             await writeFile(`./dist/extensions/${extName}.proposal.md`, md);
@@ -690,7 +690,7 @@ async function main() {
                     type: 'text',
                     value: '\n\n',
                 },
-                ...docbookRefpage(contentXast) 
+                ...docbookRefpage(contentXast, -1) 
             ]
         }
         
