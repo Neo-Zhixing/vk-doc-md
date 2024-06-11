@@ -94,7 +94,7 @@ async function parseMd(file: string): Promise<any> {
       return parsed;
 }
 
-function convertXrefs(file: Root, xrefs: Map<string, { url: string, title?: string }>, chapters: { title: string}[]) {
+function convertXrefs(file: Root, xrefs: Map<string, { url: string, title: string }>) {
   visitParents(file, 'link', link => {
     if (link.url.startsWith('xref::')) {
       const name = link.url.slice(6);
@@ -106,21 +106,13 @@ function convertXrefs(file: Root, xrefs: Map<string, { url: string, title?: stri
 
       
       if (xrefUrl && link.children.length === 1 && link.children[0].type === 'text' && link.children[0].value.startsWith('xref::name')) {
-        if (xrefUrl.title) {
-          link.children[0].value = xrefUrl.title;
-        } else if (xrefUrl.url.startsWith('/man/')) {
-          link.children[0].value = xrefUrl.url.slice(5) + '#' + name;
-        } else if (xrefUrl.url.startsWith('/chapters/')) {
-          const chapterId = xrefUrl.url.slice(10);
-          const chapter = chapters[chapterId];
-          link.children[0].value = chapter.title + '#' + name;
-        }
+        link.children[0].value = xrefUrl.title;
       }
     }
   })
 }
 
-async function convertRefpages(xrefs: Map<string, { url: string, title?: string }>, chapters: { title: string }[]) {
+async function convertRefpages(xrefs: Map<string, { url: string, title: string }>) {
     const metadata: {
         id: string,
         parent: string[],
@@ -149,7 +141,7 @@ async function convertRefpages(xrefs: Map<string, { url: string, title?: string 
             type: yaml.type,
         })
 
-        convertXrefs(tree, xrefs, chapters);
+        convertXrefs(tree, xrefs);
         file = toMarkdown(tree, {
           extensions: [gfmToMarkdown(), frontmatterToMarkdown(['yaml', 'toml'])]
         })
@@ -171,7 +163,7 @@ async function convertRefpages(xrefs: Map<string, { url: string, title?: string 
     await writeFile('./dist/man/index.json', JSON.stringify(metadata));
 }
 
-async function chapters(xrefs: Map<string, { url: string, title?: string }>, chapters: { title: string }[]) {
+async function chapters(xrefs: Map<string, { url: string, title: string }>, chapters: { title: string }[]) {
     for (const filename of await readdir('./dist/chapters/')) {
         if (!filename.endsWith('.md')) {
             continue;
@@ -184,7 +176,7 @@ async function chapters(xrefs: Map<string, { url: string, title?: string }>, cha
           extensions: [gfm(), frontmatter(['yaml', 'toml'])],
           mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(['yaml', 'toml'])]
         })
-        convertXrefs(tree, xrefs, chapters);
+        convertXrefs(tree, xrefs);
         file = toMarkdown(tree, {
           extensions: [gfmToMarkdown(), frontmatterToMarkdown(['yaml', 'toml'])]
         })
@@ -207,7 +199,7 @@ async function chapters(xrefs: Map<string, { url: string, title?: string }>, cha
 async function main() {
   const c = JSON.parse(await readFile('./dist/chapters/index.json', 'utf-8'))
   let xrefs = JSON.parse(await readFile('./dist/xrefs.json', 'utf-8'))
-  let xrefsMap: Map<string, { url: string, title?: string }> = new Map(Object.entries(xrefs))
+  let xrefsMap: Map<string, { url: string, title: string }> = new Map(Object.entries(xrefs))
 
   const allManPages = (await readdir('./dist/man')).filter(a => a.endsWith('.md')).map(a => a.slice(0, -3));
   for (const item of allManPages) {
@@ -216,7 +208,7 @@ async function main() {
     }
   }
   await chapters(xrefsMap, c);
-  await convertRefpages(xrefsMap, c);
+  await convertRefpages(xrefsMap);
 }
 
 export default function myRehypePlugin (tree, options) {

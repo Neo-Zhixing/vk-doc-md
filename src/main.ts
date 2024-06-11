@@ -200,18 +200,23 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 lang: node.attributes.language
             }]
         }
-        if (node.name === 'section')  {
+        if (node.name === 'section' || node.name === 'appendix' || node.name === 'screen')  {
             if (node.attributes['xml:id']) {
                 for (const i of node.children) {
                     if (i.type === 'text' && i.value.trim().length === 0) {
                         continue;
                     }
                     if (i.type === 'element' && i.name === 'title') {
-                        i.children.splice(0, 0, <mdast.Text>{
+                        const convertedNodes = node.children.flatMap(i => docbookConvertNode(i, level+1));
+                        const header = convertedNodes.find(i => i.type === 'heading') as mdast.Heading;
+                        header.children.splice(0, 0, <xast.Text>{
                             type: 'text',
-                            value: '#' + node.attributes['xml:id'] + ' '
+                            value: '#' + node.attributes['xml:id'] + ' ',
+                            data: {
+                                isAppendix: node.name === 'appendix'
+                            }
                         });
-                        return node.children.flatMap(i => docbookConvertNode(i, level+1));
+                        return convertedNodes;
                     }
                 }
                 return [
@@ -317,21 +322,6 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         if (node.name === 'varlistentry') {
             const terms = node.children.filter(a => a.type === 'element' && a.name === 'term');
             const listitem = node.children.filter(a => a.type === 'element' && a.name === 'listitem');
-            if ((terms.length === 0 || terms.every(a => a.type === 'element' && a.children.length === 0)) && listitem.length === 1) {
-                if (listitem[0].type === 'element') {
-                    const simpara = listitem[0].children.filter(a => a.type === 'element' && a.name === 'simpara');
-                    if (simpara.length === 1 && simpara[0].type === 'element') {
-                        const phrase = simpara[0].children.filter(a => a.type === 'element' && a.name === 'phrase');
-                        if (phrase.length === 1 && phrase[0].type === 'element') {
-                            const results = phrase[0].children.flatMap(a => docbookConvertNode(a, level))
-                            return [<mdast.Paragraph> {
-                                type: 'paragraph',
-                                children: results
-                            }];
-                        }
-                    }
-                }
-            }
             if (terms.length === 1 &&
                 listitem.length === 1 &&
                 terms[0].type === 'element' &&
@@ -356,7 +346,16 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                     }
                 ]
             }
-            if (terms.length > 0 && listitem.length === 1 && listitem[0].type === 'element') {
+            if (listitem.length === 1 && listitem[0].type === 'element') {
+                if (terms.length === 0 || terms.every(a => (a.type === 'element' && a.children.length === 0) || (a.type === 'text' && a.value.trim().length === 0))) {
+                    const startItem = listitem[0].children.findIndex(a => !(a.type === 'text' && a.value.trim().length === 0));
+                    return [
+                        <mdast.ListItem> {
+                            type: 'listItem',
+                            children:  listitem[0].children.slice(startItem).flatMap(a => docbookConvertNode(a, level))
+                        }
+                    ]
+                }
                 return [
                     ...terms.map(a => <mdast.Heading> {
                         type: 'heading',
@@ -410,17 +409,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 return [
                     <mdast.Text> {
                         type: 'text',
-                        value: '\n::validity-box\n'
-                    },
-                    <mdast.Heading> {
-                        type: 'heading',
-                        depth: 3,
-                        children: [
-                            <mdast.Text> {
-                                type: 'text',
-                                value: 'Host Synchronization'
-                            },
-                        ]
+                        value: '\n::validity-box{name="Host Synchronization"}\n'
                     },
                     <mdast.Text> {
                         type: 'text',
@@ -608,78 +597,69 @@ async function main() {
     //await writeFile('./dist/vkspec.xml', vkspecDocbook);
     const vkspecDocbookXast = fromXml(`<root>${vkspecDocbook}</root>`);
     const vkspecMdast = docbookRefpage(vkspecDocbookXast) ;
-    const xrefs = new Map<string, { url: string, title?: string }>();
+    const xrefs = new Map<string, { url: string, title: string }>();
     {
         // Chunking
         let currentChunk = []
         let currentChunkIndex = 0;
+        let currentAppendixIndex = 0;
+        let currentIsAppendix = false;
         let currentName = null;
+        let currentId = null;
         const chaptersMeta = [];
         for (const node of vkspecMdast) {
             if (node.type === 'heading' && node.depth === 1) {
                 if (currentName) {
-                    visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
-                        const match = /:anchor\{id="(.+)"\}/.exec(node.value);
-                        if (match) {
-                            const name = match[1];
-                            xrefs.set(name, { url: '/chapters/' + currentChunkIndex })
-                        }
-                    })
-                    
-                    visitParents(<mdast.Root> { type: 'root', children: currentChunk},'heading', (node) => {
-                        if (node.children.length > 0 && node.children[0].type === 'text' && node.children[0].value.startsWith('#')) {
-                            const id = node.children[0].value.slice(1).trimEnd();
-                            xrefs.set(id, { url: '/chapters/' + currentChunkIndex, title: mdHeadingToString(node.children.slice(1)) })
-                        }
-                    })
+                    setCrosslinks(
+                        <mdast.Root> { type: 'root', children: currentChunk},
+                        xrefs,
+                        '/chapters/' + currentId
+                    )
                     const md = toMarkdown({
                         type: 'root',
                         children: currentChunk
                     }, { extensions: [gfmToMarkdown()] })
-                    await writeFile(`./dist/chapters/${currentChunkIndex}.md`, md);
+                    await writeFile(`./dist/chapters/${currentId}.md`, md);
                     chaptersMeta.push({
-                        index: currentChunkIndex,
+                        index: currentIsAppendix ? currentAppendixIndex : currentChunkIndex,
                         title: currentName,
+                        id: currentId,
+                        appendix: currentIsAppendix
                     })
-                    currentChunkIndex += 1;
+                    if (currentIsAppendix) {
+                        currentAppendixIndex += 1;
+                    } else {
+                        currentChunkIndex += 1;
+                    }
                 }
                 currentChunk = [];
                 assert(node.children[0].type === 'text');
-                if (node.children[0].value.startsWith('#')) {
-                    assert(node.children[1].type === 'text');
-                    currentName = node.children[1].value;
-                } else {
-                    currentName = node.children[0].value;
-                }
+                assert(node.children[0].value.startsWith('#'));
+                assert(node.children[1].type === 'text');
+                currentName = node.children[1].value;
+                currentId = node.children[0].value.substring(1).trim();
+                currentIsAppendix = node.children[0].data['isAppendix'];
             }
             currentChunk.push(node);
         }
 
         // Get xrefs
-        visitParents(<mdast.Root> { type: 'root', children: currentChunk},'text', (node) => {
-            assert(node.type === 'text');
-            const match = /:anchor\{id="(.+)"\}/.exec(node.value);
-            if (match) {
-                const name = match[1];
-                xrefs.set(name, { url: '/chapters/' + currentChunkIndex })
-            }
-        })
-        
-        visitParents(<mdast.Root> { type: 'root', children: currentChunk},'heading', (node) => {
-            if (node.children.length > 0 && node.children[0].type === 'text' && node.children[0].value.startsWith('#')) {
-                const id = node.children[0].value.slice(1).trimEnd();
-                xrefs.set(id, { url: '/chapters/' + currentChunkIndex, title: mdHeadingToString(node.children.slice(1)) })
-            }
-        })
+        setCrosslinks(
+            <mdast.Root> { type: 'root', children: currentChunk},
+            xrefs,
+            '/chapters/' + currentId
+        )
 
         const md = toMarkdown(<mdast.Root> {
             type: 'root',
             children: currentChunk
         }, { extensions: [gfmToMarkdown()] })
-        await writeFile(`./dist/chapters/${currentChunkIndex}.md`, md);
+        await writeFile(`./dist/chapters/${currentId}.md`, md);
         chaptersMeta.push({
-            index: currentChunkIndex,
+            index: currentIsAppendix ? currentAppendixIndex : currentChunkIndex,
             title: currentName,
+            id: currentId,
+            appendix: currentIsAppendix
         })
         await writeFile(`./dist/chapters/index.json`, JSON.stringify(chaptersMeta));
     }
@@ -727,20 +707,12 @@ async function main() {
         }
         
         // Get xrefs
-        visitParents(mdast,'text', (node) => {
-            assert(node.type === 'text');
-            const match = /:anchor\{id="(.+)"\}/.exec(node.value);
-            if (match) {
-                const name = match[1];
-                xrefs.set(name, { url: '/man/' + refpage.name })
-            }
-        })
-        visitParents(mdast,'heading', (node) => {
-            if (node.children.length > 0 && node.children[0].type === 'text' && node.children[0].value.startsWith('#')) {
-                const id = node.children[0].value.slice(1).trimEnd();
-                xrefs.set(id, { url: '/man/' + refpage.name, title: mdHeadingToString(node.children.slice(1)) })
-            }
-        })
+        
+        setCrosslinks(
+            mdast,
+            xrefs,
+            '/man/' + refpage.name
+        )
         const md = toMarkdown(mdast, { extensions: [frontmatterToMarkdown(), gfmToMarkdown()] })
         await writeFile(`./dist/man/${refpage.name}.md`, md);
     }
@@ -786,4 +758,32 @@ function mdHeadingToString(children: mdast.PhrasingContent[]): string {
         }
     }
     return str;
+}
+
+function setCrosslinks(mdast: mdast.Root, xrefs: Map<string, { url: string, title: string }>, href: string) {
+    const hierarchy: string[] = [null, null, null, null, null, null];
+    let currentLevel = 0;
+    visitParents(mdast, (node, parents) => {
+        if (node.type === 'heading') {
+            if (node.children.length > 0 && node.children[0].type === 'text' && node.children[0].value.startsWith('#')) {
+                const id = node.children[0].value.slice(1).trimEnd();
+                const title = mdHeadingToString(node.children.slice(1));
+                hierarchy[node.depth - 1] = title;
+                currentLevel = node.depth;
+                xrefs.set(id, { url: href, title })
+            }
+        } else if (node.type === 'text') {
+            const match = /:anchor\{id="(.+)"\}/.exec(node.value);
+            if (match) {
+                const name = match[1];
+                if (href.startsWith('/man/')) {
+                    const refpageName = href.substring(5);
+                    xrefs.set(name, { url: href, title: refpageName })
+                } else {
+                    const headingLevels = hierarchy.slice(0, currentLevel);
+                    xrefs.set(name, { url: href, title: headingLevels.join(' > ') })
+                }
+            }
+        }
+    })
 }
