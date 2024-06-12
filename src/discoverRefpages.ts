@@ -79,7 +79,7 @@ async function *extractFromDocFile(docFilePath: string): AsyncGenerator<Refpage>
             currentPage = parseRefpageLine(line, docFilePath);
         }
     }
-    if (currentPage) {
+    if (currentPage && currentPage.name !== 'provisional-headers') {
         yield currentPage;
     }
 }

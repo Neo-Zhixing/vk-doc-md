@@ -77,9 +77,21 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         }]
     }
     if (node.type === 'element') {
-        if (node.name === 'figure') {
+        if (node.name === 'inlinemediaobject') {
+            const mediaImageObject = node.children.find(x => x.type === 'element' && x.name === 'imageobject') as xast.Element;
+            const imageData = mediaImageObject.children.find(x => x.type === 'element' && x.name === 'imagedata') as xast.Element;
+            const mediaTextObject = node.children.find(x => x.type === 'element' && x.name === 'textobject') as xast.Element;
+            const phraseObject = mediaTextObject.children.find(x => x.type === 'element' && x.name === 'phrase') as xast.Element;
+            const alt = phraseObject.children[0] as xast.Text;
+            return [<mdast.Image> {
+                type: 'image',
+                url: imageData.attributes.fileref.replace('{images}', 'https://data.vkdoc.net/images'),
+                alt: alt.value,
+            }]
+        }
+        if (node.name === 'figure' || node.name === 'informalfigure') {
             const titleNode = node.children.find(x => x.type === 'element' && x.name === 'title') as xast.Element;
-            const titleNodeText = (titleNode!.children[0] as xast.Text).value;
+            const titleNodeText = (titleNode?.children[0] as xast.Text)?.value;
             const mediaObject = node.children.find(x => x.type === 'element' && x.name === 'mediaobject') as xast.Element;
             const mediaImageObject = mediaObject.children.find(x => x.type === 'element' && x.name === 'imageobject') as xast.Element;
             const imageData = mediaImageObject.children.find(x => x.type === 'element' && x.name === 'imagedata') as xast.Element;
@@ -88,7 +100,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
             const alt = phraseObject.children[0] as xast.Text;
             return [<mdast.Image> {
                 type: 'image',
-                title: titleNodeText,
+                title: titleNodeText || '',
                 url: imageData.attributes.fileref.replace('{images}', 'https://data.vkdoc.net/images'),
                 alt: alt.value,
             }]
@@ -200,7 +212,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                 lang: node.attributes.language
             }]
         }
-        if (node.name === 'section' || node.name === 'appendix' || node.name === 'screen')  {
+        if (node.name === 'section' || node.name === 'appendix' || node.name === 'screen' || node.name === 'informalexample')  {
             if (node.attributes['xml:id']) {
                 for (const i of node.children) {
                     if (i.type === 'text' && i.value.trim().length === 0) {

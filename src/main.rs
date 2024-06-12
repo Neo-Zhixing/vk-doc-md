@@ -295,6 +295,9 @@ impl Converter {
         if let Some(specialuse) = &ext.specialuse {
             meta.push_str(&format!("specialuse: {}\n", specialuse));
         }
+        if let Some(contact) = &ext.contact {
+            meta.push_str(&format!("contact: {}\n", contact));
+        }
         Some(meta)
     }
 
