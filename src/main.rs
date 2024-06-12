@@ -1,8 +1,6 @@
 use heck::{ToShoutySnakeCase, ToSnakeCase};
 use std::{
-    collections::{hash_map::Entry, HashMap},
-    io::{Read, Seek, Write},
-    path::Path,
+    collections::{hash_map::Entry, HashMap}, fs::File, io::{Read, Seek, Write}, path::Path
 };
 
 use regex::Regex;
@@ -62,6 +60,10 @@ fn main() {
             file.set_len(mdcontent.as_bytes().len() as u64).unwrap();
         }
     }
+
+    converter.find_redirects();
+
+    // Creating redirects
 }
 
 struct Converter {
@@ -86,6 +88,23 @@ fn add_item_parent(parents: &mut HashMap<String, String>, item: &str, parent: &s
     };
 }
 impl Converter {
+    fn find_redirects(&self) {
+        for ty_info in self.types.values() {
+            if let Some(alias) = &ty_info.alias {
+                // create redirect ty -> alias
+                let mut file = File::create(format!("./dist/man/{}.json", ty_info.name.as_ref().unwrap())).unwrap();
+                file.write_fmt(format_args!("{{ \"redirect\": \"{alias}\" }}")).unwrap();
+            }
+        }
+        
+        for command_info in self.commands.values() {
+            if let vk_parse::Command::Alias { name, alias } = &command_info {
+                // create redirect ty -> alias
+                let mut file = File::create(format!("./dist/man/{}.json", name)).unwrap();
+                file.write_fmt(format_args!("{{ \"redirect\": \"{alias}\" }}")).unwrap();
+            }
+        }
+    }
     fn new(registry: Registry) -> Self {
         let mut this = Self {
             registry,
