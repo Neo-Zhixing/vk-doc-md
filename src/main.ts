@@ -583,7 +583,7 @@ async function main() {
                 // https://github.com/KhronosGroup/Vulkan-Docs/blob/b4792eab92a1d132ef95b56a7681cc6af69b570e/config/spec-macros/extension.rb#L187C10-L187C24
                 this.match(new RegExp(macro + ':(\\w+)'))
                 this.process((parent: any, target: any) => {
-                    if (target.startsWith('VK_')) {
+                    if (macro === 'apiext') {
                         return this.createInline(parent, 'anchor', target, { type: 'link', target: '/extensions/' + target })
                     } else {
                         return this.createInline(parent, 'anchor', target, { type: 'link', target: '/man/' + target })
@@ -606,7 +606,8 @@ async function main() {
               const handled =  target.startsWith('{chapters}') || target.startsWith('{generated}/validity/') ||
                 target.startsWith('{config}') || target.startsWith('{chapters}/commonvalidity') || target.startsWith('{generated}/sync') ||
                 target.startsWith('{generated}/hostsynctable') || target.startsWith('{generated}/formats') || target.startsWith('{appendices}') ||
-                target.startsWith('{generated}/interfaces/VK');
+                target.startsWith('{generated}/interfaces/VK') ||
+                target.startsWith('{generated}/meta/promoted_extensions_');
               if (!handled && !target.startsWith('{generated}/api/')) {
                 console.log(target, 'include not handled')
               }
