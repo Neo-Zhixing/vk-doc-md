@@ -65,7 +65,7 @@ async function parseMd(file: string): Promise<any> {
                 'material-theme': MaterialTheme,
               },
               bundledLangs: {
-                rust: RustLang,
+                rs: RustLang,
                 c: CLang,
               },
             })
