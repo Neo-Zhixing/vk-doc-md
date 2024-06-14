@@ -730,32 +730,37 @@ async function main() {
         let currentName = null;
         let currentId = null;
         const chaptersMeta = [];
+
+        async function flushContent () {
+            if (currentName) {
+                setCrosslinks(
+                    <mdast.Root> { type: 'root', children: currentChunk},
+                    xrefs,
+                    '/chapters/' + currentId
+                )
+                const md = toMarkdown({
+                    type: 'root',
+                    children: currentChunk
+                }, { extensions: [gfmToMarkdown()] })
+                await writeFile(`./dist/chapters/${currentId}.md`, md);
+                chaptersMeta.push({
+                    index: currentIsAppendix ? currentAppendixIndex : currentChunkIndex,
+                    title: currentName,
+                    id: currentId,
+                    appendix: currentIsAppendix
+                })
+                if (currentIsAppendix) {
+                    currentAppendixIndex += 1;
+                } else {
+                    currentChunkIndex += 1;
+                }
+            }
+            currentChunk = [];
+        }
         for (const node of vkspecMdast) {
             if (node.type === 'heading' && node.depth === 1) {
-                if (currentName) {
-                    setCrosslinks(
-                        <mdast.Root> { type: 'root', children: currentChunk},
-                        xrefs,
-                        '/chapters/' + currentId
-                    )
-                    const md = toMarkdown({
-                        type: 'root',
-                        children: currentChunk
-                    }, { extensions: [gfmToMarkdown()] })
-                    await writeFile(`./dist/chapters/${currentId}.md`, md);
-                    chaptersMeta.push({
-                        index: currentIsAppendix ? currentAppendixIndex : currentChunkIndex,
-                        title: currentName,
-                        id: currentId,
-                        appendix: currentIsAppendix
-                    })
-                    if (currentIsAppendix) {
-                        currentAppendixIndex += 1;
-                    } else {
-                        currentChunkIndex += 1;
-                    }
-                }
-                currentChunk = [];
+                await flushContent();
+                
                 assert(node.children[0].type === 'text');
                 assert(node.children[0].value.startsWith('#'));
                 assert(node.children[1].type === 'text');
@@ -766,24 +771,7 @@ async function main() {
             currentChunk.push(node);
         }
 
-        // Get xrefs
-        setCrosslinks(
-            <mdast.Root> { type: 'root', children: currentChunk},
-            xrefs,
-            '/chapters/' + currentId
-        )
-
-        const md = toMarkdown(<mdast.Root> {
-            type: 'root',
-            children: currentChunk
-        }, { extensions: [gfmToMarkdown()] })
-        await writeFile(`./dist/chapters/${currentId}.md`, md);
-        chaptersMeta.push({
-            index: currentIsAppendix ? currentAppendixIndex : currentChunkIndex,
-            title: currentName,
-            id: currentId,
-            appendix: currentIsAppendix
-        })
+        await flushContent();
         await writeFile(`./dist/chapters/index.json`, JSON.stringify(chaptersMeta));
     }
 
@@ -909,6 +897,26 @@ function setCrosslinks(mdast: mdast.Root, xrefs: Map<string, { url: string, titl
                     const headingLevels = hierarchy.slice(0, currentLevel);
                     xrefs.set(name, { url: href, title: headingLevels.join(' > ') })
                 }
+            }
+        } else if (node.type === 'html' && node.value.startsWith('<table')) {
+            let match = node.value.match(/^<table id="([a-zA-Z-_]+)"/)
+            if (match) {
+                const id = match[1];
+
+                const caption = node.value.match(/<caption [^>]+>([\s\S]+)<\/caption>/);
+                let captionPureText = '';
+                if (caption && caption[1]) {
+                    const captionXml = fromXml(`<root>${caption[1]}</root>`);
+                    visitParents(captionXml, node => {
+                        if (node.type === 'text') {
+                            captionPureText += node.value;
+                        }
+                    })
+                } else {
+                    const headingLevels = hierarchy.slice(0, currentLevel);
+                    captionPureText = headingLevels.join(' > ')
+                }
+                xrefs.set(id, { url: href, title: captionPureText })
             }
         }
     })
