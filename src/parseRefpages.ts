@@ -8,7 +8,7 @@ import { parse } from "yaml";
 import assert from "assert";
 import { parseMarkdown } from '@nuxtjs/mdc/runtime';
 import type { MDCParseOptions } from '@nuxtjs/mdc/runtime/types/parser';
-import type { MdcThemeOptions  } from '@nuxtjs/mdc/runtime/highlighter/types';
+import type { MdcThemeOptions, Highlighter } from '@nuxtjs/mdc/runtime/highlighter/types';
 import rehypeHighlight from '@nuxtjs/mdc/runtime/highlighter/rehype';
 import { createShikiHighlighter } from '@nuxtjs/mdc/runtime/highlighter/shiki'
 import {visitParents} from 'unist-util-visit-parents'
@@ -50,6 +50,8 @@ import MaterialTheme from 'shiki/themes/material-theme.mjs';
 
 import CLang from 'shiki/langs/c.mjs'
 import RustLang from 'shiki/langs/rust.mjs'
+
+let highlighter: Highlighter | null = null;
 async function parseMd(file: string): Promise<any> {
     const parsed = await parseMarkdown(file, <MDCParseOptions> {
         highlight: {
@@ -58,17 +60,7 @@ async function parseMd(file: string): Promise<any> {
               default: 'material-theme',
               dark: 'material-theme-palenight'
             },
-            highlighter: createShikiHighlighter({
-              bundledThemes: {
-                'material-theme-palenight': MaterialThemePalenight,
-                'material-theme-lighter': MaterialThemeLighter,
-                'material-theme': MaterialTheme,
-              },
-              bundledLangs: {
-                rs: RustLang,
-                c: CLang,
-              },
-            })
+            highlighter,
           },
           remark: { plugins: {
             'remark-math': {
@@ -247,6 +239,17 @@ async function chapters(xrefs: Map<string, { url: string, title: string }>, chap
 }
 
 async function main() {
+  highlighter = createShikiHighlighter({
+    bundledThemes: {
+      'material-theme-palenight': MaterialThemePalenight,
+      'material-theme-lighter': MaterialThemeLighter,
+      'material-theme': MaterialTheme,
+    },
+    bundledLangs: {
+      rs: RustLang,
+      c: CLang,
+    },
+  });
   const c = JSON.parse(await readFile('./dist/chapters/index.json', 'utf-8'))
   let xrefs = JSON.parse(await readFile('./dist/xrefs.json', 'utf-8'))
   let xrefsMap: Map<string, { url: string, title: string }> = new Map(Object.entries(xrefs))

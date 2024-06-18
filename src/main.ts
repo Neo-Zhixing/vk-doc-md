@@ -373,7 +373,6 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
                         }
                     ]
                 }
-                console.log(listitem)
                 return [
                     ...terms.map(a => <mdast.Heading> {
                         type: 'heading',

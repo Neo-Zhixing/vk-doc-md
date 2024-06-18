@@ -11,13 +11,13 @@
 		"mdast-util-to-markdown": "^2.1.0",
 		"rehype-katex": "^7.0.0",
 		"remark-math": "^6.0.0",
-		"shiki": "^1.6.3",
+		"shiki": "^1.7.0",
 		"vue": "^3.4.27",
 		"xast-util-from-xml": "^4.0.0"
 	},
 	"devDependencies": {
 		"@nuxtjs/mdc": "^0.7.1",
-		"@types/mdast": "^4.0.3",
+		"@types/mdast": "^4.0.4",
 		"@types/node": "^20.9.2",
 		"@types/xast": "^2.0.3",
 		"mdast-util-from-markdown": "^2.0.0",
