@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-vk-parse = "0.12"
+vk-parse = "0.13"
 regex = "1.10"
 heck = "0.4"
 vkxml = "0.3"
-generator = { git = "https://github.com/ash-rs/ash", tag = "0.38.0" }
+generator = { git = "https://github.com/Neo-Zhixing/ash", branch = "up-vk-parse" }

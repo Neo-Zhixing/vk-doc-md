@@ -20,7 +20,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools",
+ "itertools 0.12.1",
  "lazy_static",
  "lazycell",
  "log",
@@ -85,11 +85,11 @@ dependencies = [
 [[package]]
 name = "generator"
 version = "0.1.0"
-source = "git+https://github.com/ash-rs/ash?tag=0.38.0#b724b78dac8d83879ed7a1aad2b91bb9f2beb5cf"
+source = "git+https://github.com/Neo-Zhixing/ash?branch=up-vk-parse#22053c922842f5ec06473155d34848a092a63f13"
 dependencies = [
  "bindgen",
  "heck 0.5.0",
- "itertools",
+ "itertools 0.13.0",
  "nom",
  "once_cell",
  "proc-macro2",
@@ -132,6 +132,15 @@ name = "itertools"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -336,9 +345,9 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 
 [[package]]
 name = "vk-parse"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81086c28be67a8759cd80cbb3c8f7b520e0874605fc5eb74d5a1c9c2d1878e79"
+checksum = "4cf882fca8b9f8fe4a613dcb9f3c77d42c4d829dfdb45886c7da83928970f74c"
 dependencies = [
  "vkxml",
  "xml-rs",
