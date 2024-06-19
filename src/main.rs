@@ -4,12 +4,36 @@ use std::{
 };
 
 use regex::Regex;
-use vk_parse::Registry;
+use vk_parse::{Registry, TypeSpec};
+
+fn get_last_change_date() -> u64 {
+    use std::process::Command;
+    let output = Command::new("git")
+        .arg("log")
+        .arg("-1")
+        .arg("--format=%ct")
+        .current_dir("./Vulkan-Docs")
+        .output()
+        .expect("Failed to execute command");
+    let timestamp = String::from_utf8(output.stdout).unwrap();
+    timestamp.trim().parse().unwrap()
+}
 
 fn main() {
     let (registry, _errors) = vk_parse::parse_file(Path::new("./Vulkan-Docs/xml/vk.xml")).unwrap();
     assert!(_errors.is_empty());
     let converter = Converter::new(registry);
+    let header_version = match &converter.types.get("VK_HEADER_VERSION").as_ref().unwrap().spec {
+        TypeSpec::Code(code) => code.code.split(' ').last().unwrap(),
+        _ => panic!(),
+    };
+    let last_changed_timestamp = get_last_change_date();
+    let mut file = File::create("./dist/index.json").unwrap();
+    file.write_fmt(format_args!("{{
+        \"version\": \"1.3.{header_version}\",
+        \"last_changed\": {last_changed_timestamp}
+    }}")).unwrap();
+    drop(file);
 
     for mdfile in std::fs::read_dir("./dist/extensions").unwrap() {
         let mdfile = mdfile.unwrap();
