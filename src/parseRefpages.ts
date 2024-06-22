@@ -44,9 +44,8 @@ export const PROSE_TAGS = [
   ]
 
 
-import MaterialThemePalenight from 'shiki/themes/material-theme-palenight.mjs';
-import MaterialThemeLighter from 'shiki/themes/material-theme-lighter.mjs';
-import MaterialTheme from 'shiki/themes/material-theme.mjs';
+import GitHubThemeDark from 'shiki/themes/github-dark-default.mjs';
+import GitHubThemeLight from 'shiki/themes/github-light-default.mjs';
 
 import CLang from 'shiki/langs/c.mjs'
 import RustLang from 'shiki/langs/rust.mjs'
@@ -56,9 +55,8 @@ async function parseMd(file: string): Promise<any> {
     const parsed = await parseMarkdown(file, <MDCParseOptions> {
         highlight: {
             theme: {
-              light: 'material-theme-lighter',
-              default: 'material-theme',
-              dark: 'material-theme-palenight'
+              default: 'github-light-default',
+              dark: 'github-dark-default'
             },
             highlighter,
           },
@@ -241,9 +239,8 @@ async function chapters(xrefs: Map<string, { url: string, title: string }>, chap
 async function main() {
   highlighter = createShikiHighlighter({
     bundledThemes: {
-      'material-theme-palenight': MaterialThemePalenight,
-      'material-theme-lighter': MaterialThemeLighter,
-      'material-theme': MaterialTheme,
+      'github-dark-default': GitHubThemeDark,
+      'github-light-default': GitHubThemeLight,
     },
     bundledLangs: {
       rs: RustLang,
