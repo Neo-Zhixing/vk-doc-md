@@ -49,6 +49,8 @@ import GitHubThemeLight from 'shiki/themes/github-light-default.mjs';
 
 import CLang from 'shiki/langs/c.mjs'
 import RustLang from 'shiki/langs/rust.mjs'
+import CppLang from 'shiki/langs/cpp.mjs'
+import GlslLang from 'shiki/langs/glsl.mjs'
 
 let highlighter: Highlighter | null = null;
 async function parseMd(file: string): Promise<any> {
@@ -245,6 +247,8 @@ async function main() {
     bundledLangs: {
       rs: RustLang,
       c: CLang,
+      cpp: CppLang,
+      glsl: GlslLang,
     },
   });
   const c = JSON.parse(await readFile('./dist/chapters/index.json', 'utf-8'))

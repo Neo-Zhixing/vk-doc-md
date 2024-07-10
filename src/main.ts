@@ -203,7 +203,7 @@ function docbookConvertNode(node: xast.ElementContent, level: number): mdast.Roo
         }
         if (node.name === 'programlisting') {
             // cmdProcessAllSequences
-            if (node.children.length !== 0) { return [] }
+            if (node.children.length !== 1) { return [] }
             if (node.children[0].type !== 'text') { return [] }
             const code = node.children[0].value;
             return [<mdast.Code>{
