@@ -869,6 +869,7 @@ pub struct {name}({ty});
 
     fn generate_api_struct(&self, name: &str) -> String {
         let ty = &self.types[name];
+        let category = ty.category.as_ref().map(String::as_str).unwrap_or("struct");
         if let Some(alias) = &ty.alias {
             let rs_name = name.strip_prefix("Vk").unwrap();
             let rs_alias = alias.strip_prefix("Vk").unwrap();
@@ -980,12 +981,12 @@ type {rs_name} = vk::{rs_alias};
                 format!(
                     "::code-group
 ```c [C]
-typedef struct {name} {{
+typedef {category} {name} {{
 {c_members}
 }} {name};
 ```
 ```rs [Rust]
-pub struct {rs_name} {{
+pub {category} {rs_name} {{
 {rs_members}
 }}
 ```
