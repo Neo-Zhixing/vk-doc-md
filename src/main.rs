@@ -21,6 +21,7 @@ fn get_last_change_date() -> u64 {
 
 fn main() {
     let (registry, _errors) = vk_parse::parse_file(Path::new("./Vulkan-Docs/xml/vk.xml")).unwrap();
+    println!("{:?}", _errors);
     assert!(_errors.is_empty());
     let converter = Converter::new(registry);
     let header_version = match &converter.types.get("VK_HEADER_VERSION").as_ref().unwrap().spec {
@@ -182,6 +183,7 @@ impl Converter {
                                 profile,
                                 comment,
                                 items,
+                                reasonlink
                             } => (),
                             _ => unimplemented!(),
                         }
@@ -230,6 +232,7 @@ impl Converter {
                                     profile,
                                     comment,
                                     items,
+                                    reasonlink,
                                 } => (),
                                 _ => unimplemented!(),
                             }
