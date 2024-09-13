@@ -34,7 +34,8 @@ function docbookRefblockValidityConvert(node: xast.ElementContent, level: number
         return []
     }
     if (node.name === 'listitem') {
-        const para = node.children.find(i => i.type === 'element' && i.name === 'simpara');
+        const paraIndex = node.children.findIndex(i => i.type === 'element' && i.name === 'simpara');
+        const para = node.children[paraIndex];
         if (!para || para.type !== 'element') {
             return []
         }
@@ -47,15 +48,18 @@ function docbookRefblockValidityConvert(node: xast.ElementContent, level: number
         if (anchor.type !== 'element') {
             return []
         }
+        const nodeRest = node.children.slice(paraIndex + 1);
         const rest = para.children.slice(anchorIndex + 1);
         const name = anchor.attributes['xml:id'];
         docbookRemovePaddingNewlines(rest);
+        docbookRemovePaddingNewlines(nodeRest);
         return [
             <mdast.Text> {
                 type: 'text',
                 value: `\n::validity-field{name="${name}"}\n`
             },
             ...rest.flatMap(a => docbookConvertNode(a, level)),
+            ...nodeRest.flatMap(a => docbookConvertNode(a, level)),
             <mdast.Text> {
                 type: 'text',
                 value: '\n::\n'
